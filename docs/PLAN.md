@@ -27,7 +27,7 @@ Its own tab, opened from a toolbar button or the Tools menu. The official API ca
    - Gateway: JMP.chat (`cheogram.com`) by default; another gateway's domain can be typed in.
    - Unchecking removes only a chat address this add-on generated.
    - Phone number rules match the OMEMO add-on's (`thunderbird-omemo/src/contacts/cards.js`): any format, 10 digits read as +1, `00` as international.
-5. **Chat contacts:** a card with a chat address becomes a chat contact in Thunderbird's chat list through OMEMO for Thunderbird (the add-on with the Experiment). Its per-account choice is Off, Thunderbird only, or also on the XMPP server. This add-on's "Chat contacts" tab asks it to run (cross-add-on messaging); without it, the tab explains what it would do and links to it. With OMEMO Pro, chat contacts are also grouped by account.
+5. **Chat contacts:** through OMEMO for Thunderbird (the add-on with the Experiment). Free: chat contacts get their names from the address book. OMEMO Pro: a card with a chat address becomes a chat contact in Thunderbird's chat list (per account Off, Thunderbird only, or also on the XMPP server), and chat contacts are grouped by account. This add-on's "Chat contacts" tab asks it to run (cross-add-on messaging); without it, the tab explains what it would do and links to it. Without Pro, a chat address on a card still lets the user add the person by hand with Thunderbird's Add Contact.
 
 ## Help text (needed on the Chat addresses and Chat contacts tabs)
 Plain explanations of what each choice means, since there are two different servers involved:
