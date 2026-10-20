@@ -6,7 +6,7 @@ A free Thunderbird add-on that tidies your address book and gets your contacts r
 - **Phone numbers:** puts every number in one format (`+1 555 123 4567`, or compact `+15551234567`). Numbers without a country code are read as US and Canada by default, or another country you pick.
 - **Missing names:** gives cards without a display name one, from the first and last name, the organization, the nickname or the email address. You can change each before applying.
 - **Chat addresses:** adds XMPP chat addresses to cards, written the way Thunderbird's card editor wants them (`xmpp:` in front). A checkbox per phone contact for its JMP.chat address (`xmpp:+15551234567@cheogram.com`, for texting and calling phone numbers from an XMPP account registered with JMP.chat), "Select all phone contacts", or "Generate JMP.chat address" for one person. Also fixes chat addresses other apps saved without `xmpp:` or in an X-JABBER field.
-- **Chat contacts:** with [OMEMO for Thunderbird](https://github.com/precisioncrab/thunderbird-omemo) installed, names your XMPP chat contacts in Thunderbird from your address book, and you can chat with them end-to-end encrypted with OMEMO.
+- **Chat contacts:** with [OMEMO for Thunderbird](https://github.com/precisioncrab/thunderbird-omemo) installed (the Chat pages and the sidebar link to it until it is), names your XMPP chat contacts in Thunderbird from your address book, and you can chat with them end-to-end encrypted with OMEMO.
 
 Contacts show with their photos. Nothing changes until you look at a proposed change and apply it, and every applied change can be undone (the Changes page, or Edit > Undo last change). Undo brings deleted cards back with their photos.
 

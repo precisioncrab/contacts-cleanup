@@ -399,7 +399,7 @@ function renderSidebar() {
       h("div", { class: "sidebar-section-label" }, "Clean up"),
       item("duplicates"), item("phones"), item("names"),
       h("div", { class: "sidebar-section-label" }, "Chat"),
-      item("chat"), item("chatContacts"),
+      item("chat"), item("chatContacts"), omemoItem(),
       h("div", { class: "sidebar-section-label" }, "More"),
       item("history"), item("about"),
       h("div", { class: "sidebar-section-label" }, "Address books"),
@@ -418,6 +418,30 @@ function renderSidebar() {
           h("span", { class: "count" }, locked ? "read-only" : String(book.contacts.length)));
       })),
     h("div", { class: "sidebar-footer" }, "Nothing changes until you apply it, and every change can be undone."));
+}
+
+/**
+ * Under Chat: "Get OMEMO for Thunderbird" (its page, in the web browser),
+ * or "OMEMO settings" once OMEMO for Thunderbird answers this add-on.
+ */
+function omemoItem() {
+  const installed = Boolean(state.omemo.status?.installed);
+  const go = () => (installed ? ctx.omemo.openOptions("settings").catch(() => {}) : openLink(LINKS.omemoInstall));
+  return h("div", {
+    class: "sidebar-item sidebar-link",
+    role: "button",
+    tabindex: "0",
+    title: installed ? "Open OMEMO for Thunderbird's settings" : "End-to-end encrypted XMPP chat in Thunderbird. Opens its page in your web browser.",
+    onClick: go,
+    onKeydown: (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        go();
+      }
+    },
+  },
+  h("span", { class: "sidebar-icon", "aria-hidden": "true" }, installed ? "\u2699" : "\u2197"),
+  h("span", { class: "name" }, installed ? "OMEMO settings" : "Get OMEMO for Thunderbird"));
 }
 
 function renderProgress() {
@@ -542,4 +566,10 @@ window.addEventListener("hashchange", () => {
   });
   await reload();
   VIEWS[state.view].onShow?.(ctx);
+  // Whether OMEMO for Thunderbird answers, for the Chat pages and the sidebar.
+  if (!state.omemo.status) {
+    const status = await ctx.omemo.status();
+    state.omemo.status ??= status;
+    render();
+  }
 })();

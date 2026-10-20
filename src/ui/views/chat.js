@@ -116,6 +116,17 @@ function phoneMeta(ctx, item) {
   }
 }
 
+/** Until OMEMO for Thunderbird answers: what it adds, and where to get it. */
+function omemoBanner(ctx) {
+  const status = ctx.state.omemo.status;
+  if (!status || status.installed) {
+    return null;
+  }
+  return h("div", { class: "omemo-banner" },
+    h("span", {}, "Chat addresses get your contacts ready for XMPP chat. To see their names in Thunderbird's chat and chat with them end-to-end encrypted, add OMEMO for Thunderbird (free)."),
+    h("button", { class: "primary small", onClick: () => openLink(LINKS.omemoInstall) }, "Get OMEMO for Thunderbird"));
+}
+
 function phonesTab(ctx) {
   const rows = phoneRows(ctx);
   const addable = ctx.derived.chat.filter((item) => item.state === "none");
@@ -243,6 +254,7 @@ export default {
           ctx.state.chatTab = "fixes";
           ctx.render();
         } }, `Fix chat addresses${ctx.derived.prefix.length ? ` (${ctx.derived.prefix.length})` : ""}`)),
+      omemoBanner(ctx),
       onFixes ? fixesTab(ctx) : phonesTab(ctx),
     ];
   },

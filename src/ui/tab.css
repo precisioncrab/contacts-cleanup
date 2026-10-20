@@ -217,6 +217,15 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .sidebar-book .count { color: var(--text-faint); font-size: 11px; }
 .sidebar-book.disabled { color: var(--text-faint); cursor: default; }
 .sidebar-book.disabled:hover { background: transparent; }
+.sidebar-link { white-space: normal; align-items: flex-start; }
+.sidebar-link .name { color: var(--chip-text); overflow: visible; line-height: 1.35; }
+.sidebar-link .sidebar-icon { color: var(--chip-text); font-size: 12px; }
+.omemo-banner {
+  display: flex; align-items: center; gap: 12px; padding: 7px 16px;
+  border-bottom: 1px solid var(--border); background: var(--selected-bg);
+  font-size: 12px; color: var(--text-2);
+}
+.omemo-banner span { flex: 1; min-width: 0; }
 .sidebar-footer { padding: 8px 14px 0; border-top: 1px solid var(--border); margin-top: 8px; flex-shrink: 0; font-size: 11px; color: var(--text-meta); line-height: 1.5; }
 
 /* ---------- Main column ---------- */
