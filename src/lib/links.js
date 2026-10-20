@@ -10,8 +10,8 @@
 export const LINKS = {
   source: "https://github.com/precisioncrab/contacts-cleanup",
   issues: "https://github.com/precisioncrab/contacts-cleanup/issues",
-  omemo: "https://github.com/precisioncrab/thunderbird-omemo",
-  omemoInstall: "https://github.com/precisioncrab/thunderbird-omemo#install",
+  // OMEMO for Thunderbird's Gumroad page (free, pay what you want).
+  omemo: "https://precisioncrab.gumroad.com/l/omemo",
   omemoPro: "https://github.com/precisioncrab/thunderbird-omemo#omemo-pro-for-thunderbird",
   daynizer: "https://addons.thunderbird.net/en-US/thunderbird/addon/daynizer/",
   jmp: "https://jmp.chat/",

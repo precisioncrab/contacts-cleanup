@@ -59,7 +59,7 @@ test("no HTML injection, eval or network use", () => {
   for (const file of sources.filter((f) => f.endsWith(".js"))) {
     const text = read(file);
     assert.doesNotMatch(text, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function\(/, file);
-    assert.doesNotMatch(text, /XMLHttpRequest|WebSocket|https?:\/\/(?!github\.com\/precisioncrab|addons\.thunderbird\.net|jmp\.chat|(?:www\.)?mozilla\.org\/MPL)/, file);
+    assert.doesNotMatch(text, /XMLHttpRequest|WebSocket|https?:\/\/(?!github\.com\/precisioncrab|precisioncrab\.gumroad\.com\/l\/|addons\.thunderbird\.net|jmp\.chat|(?:www\.)?mozilla\.org\/MPL)/, file);
   }
 });
 

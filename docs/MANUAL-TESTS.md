@@ -2,11 +2,11 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; the real address books can stay unchecked in the sidebar until the test cards behave._
 
-## 0.1.7 first run
+## 0.1.8 first run
 
 **Before you start:** Thunderbird must allow unsigned add-ons (Config Editor: `xpinstall.signatures.required` = false), as for OMEMO for Thunderbird. Once the add-on is on addons.thunderbird.net, it's signed and this isn't needed.
 
-1. **Install.** Add-ons and Themes > gear > Install Add-on From File, pick `contacts-cleanup/dist/contacts-cleanup-0.1.7.xpi` (over an older one if you installed it). Thunderbird asks to allow reading and changing your address books. Expect no errors in the Error Console (Ctrl+Shift+J).
+1. **Install.** Add-ons and Themes > gear > Install Add-on From File, pick `contacts-cleanup/dist/contacts-cleanup-0.1.8.xpi` (over an older one if you installed it). Thunderbird asks to allow reading and changing your address books. Expect no errors in the Error Console (Ctrl+Shift+J).
 2. **Open it.** Its icon in the left sidebar (under Mail, Address Book, Calendar and the others; hover shows "Contacts Cleanup"). It opens as a tab. Also try the toolbar button and Tools > Contacts Cleanup (press Alt to show the menu bar): each brings up the same tab, never a second one. Restart Thunderbird once: the sidebar icon is still there.
 3. **Test address book.** In the Address Book: New Address Book, "Cleanup test". Add, with made-up details:
    - "Test Person": email `test.person@example.org`, mobile `(555) 123-4567`
@@ -23,7 +23,7 @@ _What only a person in Thunderbird can check. Use made-up cards in a throwaway a
 6. **Missing names.** The email-only card is offered "First Last". Change it if you like, Apply, check the card's display name.
 7. **Chat addresses.** Select "Phone Only", then Generate JMP.chat address. Open the card in the Address Book: its chat address is `xmpp:+15552223333@cheogram.com`, and the card can be edited and saved (no red field). Back in Contacts Cleanup, uncheck it and Apply: the address is gone.
 8. **Theme.** View > Theme: Light Mode, Dark Mode, Match System. With Match System, switch Thunderbird between its light and dark theme (Add-ons and Themes > Themes): the tab follows.
-9. **Chat contacts.** With your current OMEMO add-on (0.1.4, or Pro 0.3.0), expect the "Get OMEMO for Thunderbird" page, a bar with a Get OMEMO for Thunderbird button on Chat addresses, and a Get OMEMO for Thunderbird item in the sidebar under Chat (each opens OMEMO's page in your web browser): those versions don't answer other add-ons yet. The real test comes with OMEMO free 0.1.5 and the next Pro build.
+9. **Chat contacts.** With your current OMEMO add-on (0.1.4, or Pro 0.3.0), expect the "Get OMEMO for Thunderbird" page, a bar with a Get OMEMO for Thunderbird button on Chat addresses, and a Get OMEMO for Thunderbird item in the sidebar under Chat (each opens OMEMO's Gumroad page in your web browser; it shows a 404 until that listing is published): those versions don't answer other add-ons yet. The real test comes with OMEMO free 0.1.5 and the next Pro build.
 10. **Optional, real address books.** Check them again in the sidebar and look through the proposals without applying anything. Note any duplicate group that isn't one person, and any number that would come out wrong.
 
 **Report:** what didn't match, and any Error Console line that mentions contacts-cleanup.

@@ -124,7 +124,7 @@ function omemoBanner(ctx) {
   }
   return h("div", { class: "omemo-banner" },
     h("span", {}, "Chat addresses get your contacts ready for XMPP chat. To see their names in Thunderbird's chat and chat with them end-to-end encrypted, add OMEMO for Thunderbird (free)."),
-    h("button", { class: "primary small", onClick: () => openLink(LINKS.omemoInstall) }, "Get OMEMO for Thunderbird"));
+    h("button", { class: "primary small", onClick: () => openLink(LINKS.omemo) }, "Get OMEMO for Thunderbird"));
 }
 
 function phonesTab(ctx) {

@@ -426,7 +426,7 @@ function renderSidebar() {
  */
 function omemoItem() {
   const installed = Boolean(state.omemo.status?.installed);
-  const go = () => (installed ? ctx.omemo.openOptions("settings").catch(() => {}) : openLink(LINKS.omemoInstall));
+  const go = () => (installed ? ctx.omemo.openOptions("settings").catch(() => {}) : openLink(LINKS.omemo));
   return h("div", {
     class: "sidebar-item sidebar-link",
     role: "button",

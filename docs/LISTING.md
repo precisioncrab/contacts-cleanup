@@ -20,7 +20,7 @@ Contacts Cleanup tidies Thunderbird's address book and gets your contacts ready 
 
 **Chat addresses.** Adds XMPP chat addresses to your contacts, written the way Thunderbird's own card editor wants them. For phone contacts it makes JMP.chat addresses (+15551234567@cheogram.com), which let an XMPP account registered with JMP.chat text and call those phone numbers: check the people you want, select all phone contacts, or generate one for a single person. It also fixes chat addresses other apps saved in a form Thunderbird's card editor refuses.
 
-**Chat contacts and OMEMO.** With OMEMO for Thunderbird installed (free, open source), your XMPP chat contacts in Thunderbird get their names from your address book, and your chats can be end-to-end encrypted with OMEMO, the encryption Conversations, Cheogram and Gajim use. OMEMO for Thunderbird needs access to Thunderbird's chat, which add-ons on this site can't have, so it's installed from its own page: https://github.com/precisioncrab/thunderbird-omemo
+**Chat contacts and OMEMO.** With OMEMO for Thunderbird installed (free, open source), your XMPP chat contacts in Thunderbird get their names from your address book, and your chats can be end-to-end encrypted with OMEMO, the encryption Conversations, Cheogram and Gajim use. OMEMO for Thunderbird needs access to Thunderbird's chat, which add-ons on this site can't have, so it's installed from its own page: https://precisioncrab.gumroad.com/l/omemo
 
 **Undo.** The Changes page lists everything applied, and Undo puts the cards back, deleted ones included.
 

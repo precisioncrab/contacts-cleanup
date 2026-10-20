@@ -60,7 +60,7 @@ function notInstalled(ctx) {
     h("p", {}, "Thunderbird's chat list shows a contact's address when it has no name, which is most JMP.chat and Cheogram contacts (their names live in your phone's address book). OMEMO for Thunderbird gives your XMPP chat contacts the names from this address book, and encrypts your chats end to end with OMEMO, the encryption Conversations, Cheogram, Monal and Gajim use."),
     h("p", {}, "It isn't on addons.thunderbird.net: it needs access to Thunderbird's chat, which add-ons listed there can't have. It's free and open source (MPL-2.0), installed from its own page."),
     h("div", { class: "detail-actions", style: { maxWidth: "460px" } },
-      h("button", { class: "primary", onClick: () => openLink(LINKS.omemoInstall) }, "Get OMEMO for Thunderbird"),
+      h("button", { class: "primary", onClick: () => openLink(LINKS.omemo) }, "Get OMEMO for Thunderbird"),
       h("button", { onClick: () => refresh(ctx) }, "Check again")),
     h("div", { class: "notice" }, "Installed already? Contacts Cleanup needs OMEMO for Thunderbird 0.1.5 or later, turned on in Add-ons and Themes."),
   ];
