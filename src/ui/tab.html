@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contacts Cleanup</title>
+  <link rel="icon" href="../../icons/icon.svg">
+  <link rel="stylesheet" href="tab.css">
+  <!-- Sets the theme before the first paint (a classic script, so it runs before the module). -->
+  <script src="theme-boot.js"></script>
+  <script type="module" src="tab.js"></script>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main" id="main"></main>
+    <aside class="right-rail" id="rail"></aside>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="modal-root"></div>
+</body>
+</html>

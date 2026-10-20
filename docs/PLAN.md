@@ -1,6 +1,6 @@
 # Plan
 
-_Created 2026-10-18. Chat addresses and the split with the OMEMO add-on and Daynizer decided 2026-10-19._
+_Created 2026-10-18. Chat addresses and the split with the OMEMO add-on and Daynizer decided 2026-10-19. First build 2026-10-20: the open questions are answered under "How it's built"._
 
 ## Goal
 A free add-on on addons.thunderbird.net (ATN) that cleans up Thunderbird's address book and adds chat addresses to contact cards. It also helps people find OMEMO for Thunderbird, which ATN can't list: that add-on needs a WebExtension Experiment (Thunderbird has no official API for its chat), and ATN rejects add-ons with Experiments.
@@ -43,7 +43,12 @@ Plain explanations of what each choice means, since there are two different serv
 - Description: what it does, and that it gets contacts ready for encrypted chat with OMEMO for Thunderbird. Links to OMEMO for Thunderbird and to Daynizer.
 - Accurate wording only.
 
-## Open
-- Manifest version and the address book API details across Thunderbird 128 ESR to current (Thunderbird 158's API has `contacts.update` with a vCard).
-- How to edit a card's vCard without losing other fields.
-- The message format for the chat contacts tab. The OMEMO add-on's background already answers `chatNames.preview` and `chatNames.apply` from its own options page; an `onMessageExternal` listener there, allowing only this add-on's id, comes with this tab.
+## How it's built (2026-10-20)
+- **Manifest V3, Thunderbird 128 and later.** Checked in Thunderbird 158's own schemas: in MV3 the card API is `addressBooks.contacts`, and `update(id, vCard)` and `create(parentId, vCard)` take vCard text; a card node carries `vCard`. Permissions: `addressBooks`, `menus` (Tools > Contacts Cleanup), `storage`. No host permissions, no network.
+- **Editing a card without losing fields:** Thunderbird replaces a card's whole vCard on update, so the add-on never rebuilds a card from a model. It edits the vCard line by line (`src/core/vcard.js`): untouched lines go back byte for byte (photos, custom fields, Apple's grouped labels), and a changed value keeps its line's parameters (type, PREF) as written.
+- **Merging:** the kept card is edited; the others are deleted. Values from the other cards are added without their group (an Apple `item1.` label would point nowhere) and without PREF (the kept card's preferred values stay preferred). Fields only the other cards hold are added; categories are joined. The default kept card is one with a photo, else the one with the most fields; the default name is the fullest one.
+- **Undo:** each applied change is a history entry with every card's vCard before and after (read back from Thunderbird), and a deleted card's photo. Undo checks nothing changed since (REV and PRODID aside, so a sync doesn't count) and asks before overwriting. Deleted cards come back with their old UID, so they keep their id. The last 50 changes are kept.
+- **Phone format:** US and Canada numbers are always `+1 555 123 4567`. Other countries' numbers keep the digit grouping the user typed (each country groups its own way); one written as a single block gets a simple grouping. The compact format is plain +E.164. Numbers with an extension, or without a country code when none is picked, are left alone and listed.
+- **Generated chat addresses** are tracked per card id (`generated` in storage), so only those are ever removed; undo keeps that record in step.
+- **UI:** plain DOM, no framework and no build step, so the package is the source ATN reviews. Daynizer's color tokens (dark and light), sidebar, toolbar, rows, detail panel and menu bar; View > Theme with Match System (follows Thunderbird's theme), Light Mode and Dark Mode, as in Daynizer.
+- **Chat contacts protocol (OMEMO for Thunderbird's `runtime.onMessageExternal`, answering only `contacts-cleanup@precisioncrab`):** `hello` -> `{ name, version, pro, protocol: 1 }`; `chatNames.preview` -> the same result its options page shows; `chatNames.setMode { jid, mode }` saves the account's choice (`off`, `local`, `server`) and writes; `openOptions { section }`. Without an answer (not installed, turned off, or older than 0.1.5) the tab explains and links to it. Telling those apart would need the `management` permission, which isn't worth asking for.
