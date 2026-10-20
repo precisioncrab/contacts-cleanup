@@ -112,7 +112,10 @@ export default {
   count: () => null,
 
   onShow(ctx) {
-    if (!ctx.state.omemo.status && !ctx.state.omemo.loading) {
+    // The tab asks whether OMEMO for Thunderbird is there when it opens;
+    // this page also needs its accounts, so it asks unless it has them.
+    const omemo = ctx.state.omemo;
+    if (!omemo.loading && (!omemo.status || (omemo.status.installed && !omemo.result))) {
       refresh(ctx);
     }
   },
