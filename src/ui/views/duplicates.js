@@ -83,6 +83,8 @@ function defaultsFor(cards, options, keeperId) {
     single,
     multi,
     note: (options.notes.find((n) => n.from === keeperId) ?? options.notes[0])?.text ?? "",
+    // The kept card's photo if it has one, else the first card's that does.
+    photoFrom: options.photos.includes(keeperId) ? keeperId : options.photos[0] ?? null,
     // Values edited (field -> value key -> text, or an address's parts) and added during the merge.
     edits: {},
     added: {},
@@ -120,7 +122,7 @@ async function merge(ctx, group) {
   const keeper = cards.find((c) => c.id === ed.keeperId) ?? cards[0];
   const name = ed.name.trim() || label(keeper);
   const vCard = mergeVCard(cards, keeper.id, {
-    name, given: ed.given.trim(), family: ed.family.trim(), multi: ed.multi, single: ed.single, note: ed.note, edits: ed.edits, added: ed.added,
+    name, given: ed.given.trim(), family: ed.family.trim(), multi: ed.multi, single: ed.single, note: ed.note, edits: ed.edits, added: ed.added, photoFrom: ed.photoFrom,
   });
   const left = group.cards.filter((c) => !m.checked.has(c.id)).map((c) => c.id);
   const entry = await ctx.apply(`Merged ${plural(cards.length, "card", "cards")} into ${name}`, [
@@ -230,7 +232,7 @@ function groupPage(ctx, group) {
               name: "keeper",
               checked: ed.keeperId === card.id,
               onChange: () => {
-                Object.assign(ed, defaultsFor(checked, ed.options, card.id), { multi: ed.multi, name: ed.name, given: ed.given, family: ed.family, edits: ed.edits, added: ed.added });
+                Object.assign(ed, defaultsFor(checked, ed.options, card.id), { multi: ed.multi, name: ed.name, given: ed.given, family: ed.family, edits: ed.edits, added: ed.added, photoFrom: ed.photoFrom });
                 ctx.render();
               },
             }),
@@ -306,6 +308,23 @@ function mergeDetails(ctx, ed, cards, section) {
         h("option", { value: "", selected: !ed.single[f.name] }, "(none)"),
         f.values.map((v) => h("option", { value: v.text, selected: ed.single[f.name] === v.text }, `${v.text}  (${from(v.from)})`)))))),
 
+    ed.options.photos.length
+      ? h("div", { class: "page-section" },
+        h("div", { class: "label" }, "Photo"),
+        h("div", { class: "photo-choices" }, ed.options.photos.map((id) => h("label", { class: `photo-choice${ed.photoFrom === id ? " on" : ""}` },
+          h("input", {
+            type: "radio",
+            name: "merge-photo",
+            checked: ed.photoFrom === id,
+            onChange: () => {
+              ed.photoFrom = id;
+              ctx.render();
+            },
+          }),
+          avatar(byId.get(id), true),
+          h("span", { class: "from" }, from(id))))))
+      : null,
+
     MULTI.map((f) => {
       const values = ed.options.multi.find((m) => m.name === f.name)?.values ?? [];
       const added = ed.added[f.name] ?? [];
@@ -376,7 +395,7 @@ function mergeDetails(ctx, ed, cards, section) {
         } }, `+ Add the note ${from(n.from)}`)))),
 
     ed.options.categories.length ? h("p", { class: "hint" }, `Categories: all kept (${ed.options.categories.join(", ")}).`) : null,
-    h("p", { class: "hint" }, "Anything else on the cards (a photo, other fields) stays on the card you keep, and fields only the other cards have are added to it."));
+    h("p", { class: "hint" }, "Anything else on the cards stays on the card you keep, and fields only the other cards have are added to it."));
 }
 
 export default {

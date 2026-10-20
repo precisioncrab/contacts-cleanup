@@ -100,3 +100,41 @@ test("history keeps the newest entries", () => {
   assert.equal(history.length, HISTORY_LIMIT);
   assert.equal(history[0].id, String(HISTORY_LIMIT + 4));
 });
+
+const PHOTO = "PHOTO;VALUE=URL:data:image/png;base64,QUJD";
+
+test("a change that leaves the photo alone stores both vCards without it; undo puts the photo back", async () => {
+  const book = fakeBook([{ id: "p", parentId: "book-1", vCard: vcard("FN:Jane Doe", PHOTO, "UID:p") }]);
+  const { entry } = await applyChanges(book, "Name", [{ type: "update", id: "p", vCard: vcard("FN:Jane", PHOTO, "UID:p"), label: "Jane" }]);
+  const [card] = entry.cards;
+  assert.equal(card.photoKept, true);
+  assert.ok(!card.before.includes("PHOTO") && !card.after.includes("PHOTO"));
+  // A sync touching the photo afterwards is no conflict, and the photo on the card now stays.
+  book.nodes.get("p").vCard = vcard("FN:Jane", "PHOTO;VALUE=URL:data:image/png;base64,TkVX", "UID:p");
+  const result = await undoEntry(book, entry);
+  assert.equal(result.done, true);
+  assert.ok(book.nodes.get("p").vCard.includes("FN:Jane Doe"));
+  assert.ok(book.nodes.get("p").vCard.includes("base64,TkVX"));
+});
+
+test("a change of photo is stored whole; a deleted card's photo comes back from its vCard", async () => {
+  const book = fakeBook([
+    { id: "a", parentId: "book-1", vCard: vcard("FN:A", "UID:a") },
+    { id: "b", parentId: "book-1", vCard: vcard("FN:B", PHOTO, "UID:b") },
+  ]);
+  let asked = 0;
+  book.photo = async () => {
+    asked++;
+    return null;
+  };
+  const { entry } = await applyChanges(book, "Merged", [
+    { type: "update", id: "a", vCard: vcard("FN:A", PHOTO, "UID:a"), label: "A" },
+    { type: "delete", id: "b", label: "B" },
+  ]);
+  assert.equal(entry.cards[0].photoKept, undefined);
+  assert.ok(entry.cards[0].after.includes("PHOTO"));
+  assert.equal(asked, 0);
+  await undoEntry(book, entry);
+  assert.ok(!book.nodes.get("a").vCard.includes("PHOTO"));
+  assert.ok(book.nodes.get("b").vCard.includes(PHOTO));
+});

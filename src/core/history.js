@@ -7,9 +7,13 @@
  *
  * Every applied change is one history entry holding each card before and
  * after: { id, time, title, cards: [{ id, parentId, label, before, after,
- * photo }], undone }. `after` is the vCard as Thunderbird saved it (read
- * back), or null for a card that was deleted; `photo` is a deleted card's
- * photo as a data URL, so undo can put it back.
+ * photoKept, photo }], undone }. `after` is the vCard as Thunderbird saved
+ * it (read back), or null for a card that was deleted. Photos come inside
+ * the vCards (Thunderbird adds a local card's photo as a data URL), so a
+ * change that leaves a card's photo alone stores both vCards without it
+ * (`photoKept`), and undo puts the card's current photo back in: a phone
+ * fix on hundreds of cards doesn't store hundreds of photos twice. `photo`
+ * is a deleted card's photo as a data URL, only when its vCard had none.
  *
  * Undo puts every card back as it was. A card that changed since (edited
  * in Thunderbird, or by a sync) is a conflict: undo stops and asks, and
@@ -20,7 +24,7 @@
  * remove(id), photo(id) -> dataUrl|null, setPhoto(id, dataUrl).
  */
 
-import { comparable, parseVCard, serializeVCard } from "./vcard.js";
+import { comparable, parseVCard, serializeVCard, photoLines, withoutPhoto, withPhoto } from "./vcard.js";
 
 export const HISTORY_LIMIT = 50;
 
@@ -42,13 +46,17 @@ export async function applyChanges(api, title, changes, onProgress = () => {}) {
         throw new Error(`"${change.label}" isn't in the address book any more.`);
       }
       if (change.type === "delete") {
-        const photo = await api.photo(change.id).catch(() => null);
+        const photo = photoLines(node.vCard) ? null : await api.photo(change.id).catch(() => null);
         await api.remove(change.id);
         entry.cards.push({ id: change.id, parentId: node.parentId, label: change.label, before: node.vCard, after: null, photo });
       } else {
         await api.update(change.id, change.vCard);
-        const saved = await api.get(change.id);
-        entry.cards.push({ id: change.id, parentId: node.parentId, label: change.label, before: node.vCard, after: saved?.vCard ?? change.vCard });
+        const saved = (await api.get(change.id))?.vCard ?? change.vCard;
+        const record = { id: change.id, parentId: node.parentId, label: change.label, before: node.vCard, after: saved };
+        if (photoLines(node.vCard) === photoLines(saved)) {
+          Object.assign(record, { before: withoutPhoto(node.vCard), after: withoutPhoto(saved), photoKept: true });
+        }
+        entry.cards.push(record);
       }
       onProgress(i + 1, changes.length);
     }
@@ -104,7 +112,7 @@ export async function undoEntry(api, entry, { force = false } = {}) {
           await api.setPhoto(id, card.photo).catch(() => {});
         }
       } else {
-        await api.update(card.id, card.before);
+        await api.update(card.id, card.photoKept ? withPhoto(card.before, photoLines(node.vCard)) : card.before);
       }
     }
     return { conflicts, done: true, error: null };

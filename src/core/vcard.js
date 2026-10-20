@@ -158,10 +158,35 @@ export function splitStructured(value) {
   return String(value).split(/(?<!\\);/).map(unescapeText);
 }
 
-/** The vCard with lines that change on every save (REV, PRODID) left out, for comparing two versions. */
+/**
+ * The vCard with lines that change on every save (REV, PRODID) and the
+ * photo left out, for comparing two versions. (Thunderbird adds a local
+ * card's photo to the vCard it gives add-ons, so the photo isn't a change.)
+ */
 export function comparable(text) {
   return parseVCard(text).props
-    .filter((p) => p.name !== "REV" && p.name !== "PRODID")
+    .filter((p) => p.name !== "REV" && p.name !== "PRODID" && p.name !== "PHOTO")
     .map((p) => p.raw)
     .join("\n");
+}
+
+/** A vCard's PHOTO lines, as one string ("" without a photo). */
+export function photoLines(text) {
+  return parseVCard(text).props.filter((p) => p.name === "PHOTO").map((p) => p.raw).join("\r\n");
+}
+
+/** The vCard without its PHOTO lines. */
+export function withoutPhoto(text) {
+  const card = parseVCard(text);
+  card.props = card.props.filter((p) => p.name !== "PHOTO");
+  return serializeVCard(card);
+}
+
+/** The vCard with the given PHOTO lines (from photoLines()) in place of its own. */
+export function withPhoto(text, lines) {
+  const card = parseVCard(withoutPhoto(text));
+  for (const raw of lines ? lines.split("\r\n") : []) {
+    insertProp(card, parseLine(raw));
+  }
+  return serializeVCard(card);
 }

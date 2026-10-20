@@ -100,3 +100,13 @@ test("comparable ignores REV and PRODID", () => {
   const b = "BEGIN:VCARD\r\nPRODID:x\r\nFN:A\r\nREV:2\r\nEND:VCARD\r\n";
   assert.equal(comparable(a), comparable(b));
 });
+
+test("photo lines: read, left out, put back; comparing ignores the photo", async () => {
+  const { photoLines, withoutPhoto, withPhoto } = await import("../src/core/vcard.js");
+  assert.equal(photoLines(SAMPLE), "PHOTO;VALUE=URL:data:image/jpeg;base64,AAAA");
+  const bare = withoutPhoto(SAMPLE);
+  assert.equal(photoLines(bare), "");
+  assert.equal(photoLines(withPhoto(bare, photoLines(SAMPLE))), "PHOTO;VALUE=URL:data:image/jpeg;base64,AAAA");
+  assert.equal(withPhoto(bare, ""), bare);
+  assert.equal(comparable(SAMPLE), comparable(bare));
+});

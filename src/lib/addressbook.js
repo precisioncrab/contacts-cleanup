@@ -71,6 +71,12 @@ export const api = {
   },
 };
 
+/** A card's photo as an object URL for an <img>, or null when it has none. */
+export async function photoUrl(id) {
+  const file = await contacts().getPhoto(id).catch(() => null);
+  return file ? URL.createObjectURL(file) : null;
+}
+
 /** Calls `listener` (debounced) whenever a card or address book changes. */
 export function onAddressBookChange(listener, wait = 600) {
   let timer = null;

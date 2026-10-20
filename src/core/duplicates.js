@@ -333,6 +333,7 @@ const display = (prop) => (prop.name === "ADR"
  *   multi      [{ name, label, values: [{ key, text, from }] }], every distinct value
  *   single     [{ name, label, values: [{ text, from }] }] where the cards hold a value
  *   notes      [{ from, text }]
+ *   photos     ids of the cards with a photo
  *   categories the union of the cards' categories
  */
 export function mergeOptions(cards) {
@@ -374,7 +375,9 @@ export function mergeOptions(cards) {
     .map((c) => ({ from: c.id, text: unescapeText(first(c.vcard, "NOTE")?.value ?? "").trim() }))
     .filter((n) => n.text);
 
-  return { keeper: keeper.id, names, multi, single, notes, categories: categoriesOf([keeper, ...cards]) };
+  // The cards with a photo, the kept card's first.
+  const photos = [keeper, ...cards.filter((c) => c !== keeper)].filter((c) => c.hasPhoto).map((c) => c.id);
+  return { keeper: keeper.id, names, multi, single, notes, photos, categories: categoriesOf([keeper, ...cards]) };
 }
 
 function categoriesOf(cards) {
@@ -406,6 +409,7 @@ function categoriesOf(cards) {
  * @param {Object<string, Object<string, string|string[]>>} [choice.edits] - field name -> value key -> the value as edited
  *   (an address as its seven parts); an emptied value is left out
  * @param {Object<string, {value: string|string[], type: string}[]>} [choice.added] - field name -> values added during the merge
+ * @param {string} [choice.photoFrom] - the card whose photo the merged card gets (default: the kept card's own)
  */
 export function mergeVCard(cards, keeperId, choice) {
   const keeper = cards.find((c) => c.id === keeperId);
@@ -500,6 +504,15 @@ export function mergeVCard(cards, keeperId, choice) {
     if (wanted) {
       const source = cards.map((c) => first(c.vcard, field.name)).find((p) => p && display(p).trim() === wanted);
       insertProp(vcard, source ? withoutGroupAndParams(source) : makeProp(field.name, escapeText(wanted)));
+    }
+  }
+
+  // Photo: another card's, if picked.
+  const photoCard = choice.photoFrom && choice.photoFrom !== keeperId ? others.find((c) => c.id === choice.photoFrom) : null;
+  if (photoCard && getAll(photoCard.vcard, "PHOTO").length) {
+    getAll(vcard, "PHOTO").forEach((p) => removeProp(vcard, p));
+    for (const prop of getAll(photoCard.vcard, "PHOTO")) {
+      insertProp(vcard, parseLine(prop.group ? prop.raw.slice(prop.group.length + 1) : prop.raw));
     }
   }
 

@@ -273,6 +273,20 @@ test("values can be edited, emptied and added while merging; each line keeps its
   assert.equal(readCard({ id: "k", vCard: text }).phones.length, 3);
 });
 
+test("the merged card can take another card's photo", () => {
+  const keeper = card(["FN:Jane Doe", "EMAIL:jane@example.org", "TEL:555-123-4567"], { id: "k" });
+  const pictured = card(["FN:Jane Doe", "EMAIL:jane@example.org", "item1.PHOTO;VALUE=URL:data:image/png;base64,QUJD"], { id: "p" });
+  const options = mergeOptions([keeper, pictured]);
+  // The card with a photo is the one kept by default.
+  assert.equal(options.keeper, "p");
+  assert.deepEqual(options.photos, ["p"]);
+  const multi = Object.fromEntries(options.multi.map((f) => [f.name, f.values.map((v) => v.key)]));
+  const merged = parseVCard(mergeVCard([keeper, pictured], "k", { name: "Jane Doe", multi, single: {}, note: "", photoFrom: "p" }));
+  assert.deepEqual(getAll(merged, "PHOTO").map((p) => p.raw), ["PHOTO;VALUE=URL:data:image/png;base64,QUJD"]);
+  const without = parseVCard(mergeVCard([keeper, pictured], "k", { name: "Jane Doe", multi, single: {}, note: "" }));
+  assert.equal(getAll(without, "PHOTO").length, 0);
+});
+
 test("the kept card gets a name and N from the others when it has none", () => {
   const keeper = card(["EMAIL:jane@example.org"], { id: "k" });
   const other = card(["FN:Jane Doe", "N:Doe;Jane;;;", "EMAIL:jane@example.org"], { id: "o" });

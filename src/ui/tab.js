@@ -15,6 +15,7 @@
  */
 
 import { h, fill, plural } from "./dom.js";
+import { onPhotosLoaded } from "./parts.js";
 import { menuBar } from "./menu.js";
 import { THEMES, applyTheme, getThemePref, initTheme } from "./theme.js";
 import { loadBooks, api, onAddressBookChange } from "../lib/addressbook.js";
@@ -528,6 +529,7 @@ window.addEventListener("hashchange", () => {
   state.generated = stored.generated ?? {};
   state.history = stored.history ?? [];
   initTheme(state.settings.theme);
+  onPhotosLoaded(render);
   const view = location.hash.slice(1);
   if (VIEWS[view]) {
     state.view = view;
