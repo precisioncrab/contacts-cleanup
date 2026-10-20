@@ -2,11 +2,11 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; the real address books can stay unchecked in the sidebar until the test cards behave._
 
-## 0.1.1 first run (0.1.0 plus sorting a duplicate group into people)
+## 0.1.2 first run
 
 **Before you start:** Thunderbird must allow unsigned add-ons (Config Editor: `xpinstall.signatures.required` = false), as for OMEMO for Thunderbird. Once the add-on is on addons.thunderbird.net, it's signed and this isn't needed.
 
-1. **Install.** Add-ons and Themes > gear > Install Add-on From File, pick `contacts-cleanup/dist/contacts-cleanup-0.1.1.xpi` (over 0.1.0 if you installed it). Thunderbird asks to allow reading and changing your address books. Expect no errors in the Error Console (Ctrl+Shift+J).
+1. **Install.** Add-ons and Themes > gear > Install Add-on From File, pick `contacts-cleanup/dist/contacts-cleanup-0.1.2.xpi` (over an older one if you installed it). Thunderbird asks to allow reading and changing your address books. Expect no errors in the Error Console (Ctrl+Shift+J).
 2. **Open it.** The Contacts Cleanup toolbar button, or Tools > Contacts Cleanup (press Alt to show the menu bar). It opens as a tab. Click the button again: the same tab comes to the front, no second tab.
 3. **Test address book.** In the Address Book: New Address Book, "Cleanup test". Add, with made-up details:
    - "Test Person": email `test.person@example.org`, mobile `(555) 123-4567`
@@ -16,7 +16,8 @@ _What only a person in Thunderbird can check. Use made-up cards in a throwaway a
 
    Back in Contacts Cleanup (it updates by itself): in the sidebar under Address books, uncheck every book except "Cleanup test".
 4. **Duplicates.** Test Person and Test P show as one group ("same email"). Review and merge: both numbers, the email, Example Co are listed. Merge into one. In the Address Book: one card with both numbers and the organization. Then Undo (the message at the bottom, or Changes): both cards are back as they were.
-4b. **A group that's several people.** Add a made-up household to "Cleanup test": "Sam Roe" (home `555-666-7777`, email `sam@example.org`), "Sammy Roe" (email `sam@example.org`), "Pat Roe" (home `(555) 666-7777`, email `pat@example.org`), "Patricia Roe" (email `pat@example.org`), "Alex Roe" (home `555 666 7777`). They show as one group, "looks like 3 people". Sort and merge: Sam and Sammy should be Person 1 or 2, Pat and Patricia the other, Alex alone; under each card it says what it shares with whom. Move a card to New person and back with its picker. Apply: two merged cards plus Alex, and the group is gone. Undo: all five are back and the group shows again.
+4b. **A group that's several people.** Add a made-up household to "Cleanup test": "Sam Roe" (home `555-666-7777`, email `sam@example.org`), "Sammy Roe" (email `sam@example.org`), "Pat Roe" (home `(555) 666-7777`, email `pat@example.org`), "Patricia Roe" (email `pat@example.org`), "Alex Roe" (home `555 666 7777`). The Duplicates list shows them as one group tagged "looks like 3 people". Click Sort and merge: the page says "Who is who: 5 cards", a sentence explains it, and there are three columns: Sammy Roe (Sam and Sammy), Patricia Roe (Pat and Patricia), Alex Roe (left as it is). Under each card it says what it shares with whom. Use Alex's Move to menu to put him with Patricia, then Move to > "A new person" to take him out again. Step 2 below has a tab for Sammy Roe and one for Patricia Roe. Apply: two merged cards plus Alex, and the group is gone. Undo: all five are back and the group shows again.
+4c. **Address books.** Make a second address book, "Cleanup test 2", with a card "Test Person" and the email `test.person@example.org`. It doesn't join the Test Person group: the same person in two address books isn't a duplicate. Check "Also match cards in different address books" at the top of Duplicates: now it does. Uncheck it again.
 5. **Phone numbers.** The numbers show as `+1 555 ...`. Apply. Open a card in the Address Book: the number changed, its type (mobile, work) didn't. Undo from Changes.
 6. **Missing names.** The email-only card is offered "First Last". Change it if you like, Apply, check the card's display name.
 7. **Chat addresses.** Select "Phone Only", then Generate JMP.chat address. Open the card in the Address Book: its chat address is `xmpp:+15552223333@cheogram.com`, and the card can be edited and saved (no red field). Back in Contacts Cleanup, uncheck it and Apply: the address is gone.

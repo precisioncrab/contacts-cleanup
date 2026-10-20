@@ -70,14 +70,20 @@ function keysOf(card) {
 /**
  * Groups of cards that look like the same person, biggest first:
  * [{ cards, reasons }]. `cards` are read cards (src/core/card.js);
- * read-only ones are left out. `dismissed` holds pairKey()s.
+ * read-only ones are left out. `dismissed` holds pairKey()s. Cards are
+ * only compared within their own address book unless `acrossBooks`: the
+ * same person kept in two address books isn't a duplicate (Google
+ * Contacts won't merge across accounts; Apple Contacts links such cards
+ * instead of merging them).
  */
-export function findDuplicates(cards, dismissed = new Set()) {
+export function findDuplicates(cards, dismissed = new Set(), { acrossBooks = false } = {}) {
   const live = cards.filter((c) => !c.readOnly);
   const keys = live.map(keysOf);
   const buckets = new Map();
-  live.forEach((_, i) => {
-    for (const key of keys[i].keys()) {
+  live.forEach((card, i) => {
+    for (const match of keys[i].keys()) {
+      // The match comes first, so key[0] still says what kind it is.
+      const key = acrossBooks ? match : `${match} in ${card.parentId}`;
       if (!buckets.has(key)) {
         buckets.set(key, []);
       }
@@ -212,12 +218,17 @@ export function strongLink(link) {
 
 /**
  * A first guess at who is who in a group: card id -> person number (1, 2,
- * ...), cards joined by strong links being one person. People are numbered
- * biggest first. `dismissed` pairs are never joined directly.
+ * ...), people numbered biggest first. Strong links join cards, strongest
+ * first (a shared email or chat address, then a shared phone, then the
+ * same name), but two sets of cards are never joined when any two of
+ * their names clash (namesCompatible) or any two of their cards were
+ * marked "not duplicates". So a card with no name that shares Sam's email
+ * and Pat's phone joins Sam, and doesn't pull Pat in with him.
  */
 export function suggestPeople(cards, dismissed = new Set()) {
   const index = new Map(cards.map((c, i) => [c.id, i]));
   const parent = cards.map((_, i) => i);
+  const members = cards.map((c) => [c]);
   const find = (x) => {
     while (parent[x] !== x) {
       parent[x] = parent[parent[x]];
@@ -225,9 +236,18 @@ export function suggestPeople(cards, dismissed = new Set()) {
     }
     return x;
   };
-  for (const link of groupLinks(cards)) {
-    if (strongLink(link) && !dismissed.has(pairKey(link.a.id, link.b.id))) {
-      parent[find(index.get(link.a.id))] = find(index.get(link.b.id));
+  const fits = (ra, rb) => members[ra].every((x) => members[rb].every((y) => namesCompatible(x, y) && !dismissed.has(pairKey(x.id, y.id))));
+  const rank = (link) => {
+    const kinds = new Set(link.shared.map((s) => s.kind));
+    return kinds.has("email") || kinds.has("chat") ? 0 : kinds.has("phone") ? 1 : 2;
+  };
+  const links = groupLinks(cards).filter(strongLink).sort((x, y) => rank(x) - rank(y));
+  for (const link of links) {
+    const ra = find(index.get(link.a.id));
+    const rb = find(index.get(link.b.id));
+    if (ra !== rb && fits(ra, rb)) {
+      parent[ra] = rb;
+      members[rb] = [...members[rb], ...members[ra]];
     }
   }
   const people = new Map();
@@ -237,12 +257,18 @@ export function suggestPeople(cards, dismissed = new Set()) {
   });
   const sorted = [...people.values()].sort((x, y) => y.length - x.length || label(x[0]).localeCompare(label(y[0])));
   const assign = {};
-  sorted.forEach((members, n) => {
-    for (const card of members) {
+  sorted.forEach((group, n) => {
+    for (const card of group) {
       assign[card.id] = n + 1;
     }
   });
   return assign;
+}
+
+/** What to call a person: the fullest real name among its cards, else the first card's label. */
+export function personName(cards) {
+  const names = cards.map(label).filter(isRealName).sort((a, b) => b.length - a.length);
+  return names[0] ?? label(cards[0]);
 }
 
 /** The pairs of cards put in different people (pairKey()s), to keep them from grouping again. */

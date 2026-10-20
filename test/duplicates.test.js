@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { card } from "./helpers.js";
-import { findDuplicates, mergeOptions, mergeVCard, nameKey, pairKey, namesCompatible, groupLinks, suggestPeople, apartPairs } from "../src/core/duplicates.js";
+import { findDuplicates, mergeOptions, mergeVCard, nameKey, pairKey, namesCompatible, groupLinks, suggestPeople, apartPairs, personName } from "../src/core/duplicates.js";
 import { parseVCard, getAll, first } from "../src/core/vcard.js";
 import { readCard } from "../src/core/card.js";
 
@@ -30,6 +30,16 @@ test("cards sharing an email, number (any format), chat address or name are grou
   assert.deepEqual(ids(groups).sort(), [["a", "b"], ["c", "d"], ["e", "f"], ["g", "h"]]);
   assert.deepEqual(groups.find((x) => x.cards[0].id === "c" || x.cards[1].id === "c").reasons, ["same phone number"]);
   assert.deepEqual(groups.find((x) => x.cards.some((y) => y.id === "g")).reasons, ["same name"]);
+});
+
+test("the same person in two address books isn't a duplicate, unless asked", () => {
+  const home = card(["FN:Jane Doe", "EMAIL:jane@example.org"], { id: "home", parentId: "book-1" });
+  const work = card(["FN:Jane Doe", "EMAIL:jane@example.org"], { id: "work", parentId: "book-2", book: "Work" });
+  const homeAgain = card(["FN:Jane D", "EMAIL:jane@example.org"], { id: "home2", parentId: "book-1" });
+  assert.deepEqual(ids(findDuplicates([home, work, homeAgain])), [["home", "home2"]]);
+  assert.deepEqual(findDuplicates([home, work, homeAgain])[0].reasons, ["same email"]);
+  assert.deepEqual(ids(findDuplicates([home, work, homeAgain], new Set(), { acrossBooks: true })), [["home", "home2", "work"]]);
+  assert.deepEqual(findDuplicates([home, work], new Set(), { acrossBooks: true })[0].reasons, ["same email", "same name"]);
 });
 
 test("chains join into one group; dismissed pairs don't link", () => {
@@ -88,6 +98,42 @@ test("a household and a shared name chain into one group, and are sorted into pe
   const apart = new Set(apartPairs(assign));
   assert.equal(apart.size, 8);
   assert.deepEqual(findDuplicates([sam1, sam2, pat1, pat2, kid], apart).map((g) => g.cards.map((x) => x.id).sort()), [["pat1", "pat2"], ["sam1", "sam2"]]);
+});
+
+test("cards without a name don't glue different people together", () => {
+  // 10 cards, 3 people. The nameless cards share details with two people each.
+  const cards = [
+    card(["FN:Jane Roe", "EMAIL:jane@example.org", "TEL:555-111-0001"], { id: "jane1" }),
+    card(["FN:Jane R", "EMAIL:jane@example.org"], { id: "jane2" }),
+    card(["FN:Jane Roe", "TEL:555-111-0001"], { id: "jane3" }),
+    card(["FN:John Roe", "EMAIL:john@example.org", "TEL:555-111-0002"], { id: "john1" }),
+    card(["FN:Johnny Roe", "EMAIL:john@example.org"], { id: "john2" }),
+    card(["FN:Kim Lee", "EMAIL:kim@example.org", "TEL:555-111-0003"], { id: "kim1" }),
+    card(["FN:Kim Lee", "TEL:(555) 111-0003"], { id: "kim2" }),
+    // No names: Jane's email and John's number; John's email and Kim's number.
+    card(["EMAIL:jane@example.org", "TEL:555-111-0002"], { id: "glue1" }),
+    card(["EMAIL:john@example.org", "TEL:555-111-0003"], { id: "glue2" }),
+    // "J Roe" fits Jane and John alike.
+    card(["FN:J Roe", "TEL:555-111-0001", "EMAIL:john@example.org"], { id: "j" }),
+  ];
+  const groups = findDuplicates(cards);
+  assert.equal(groups.length, 1);
+  const assign = suggestPeople(groups[0].cards);
+  const person = (...ids) => new Set(ids.map((id) => assign[id]));
+  assert.equal(person("jane1", "jane2", "jane3").size, 1);
+  assert.equal(person("john1", "john2").size, 1);
+  assert.equal(person("kim1", "kim2").size, 1);
+  assert.equal(person("jane1", "john1", "kim1").size, 3);
+  // Each nameless card joins one person through its email (the strongest match), never two.
+  assert.equal(assign.glue1, assign.jane1);
+  assert.equal(assign.glue2, assign.john1);
+  assert.ok([assign.jane1, assign.john1].includes(assign.j));
+  assert.equal(new Set(Object.values(assign)).size, 3);
+});
+
+test("a person is called by its fullest real name", () => {
+  assert.equal(personName([card(["FN:Pat Roe"]), card(["FN:Patricia Roe"]), card(["EMAIL:pat@example.org"])]), "Patricia Roe");
+  assert.equal(personName([card(["EMAIL:pat@example.org"])]), "pat@example.org");
 });
 
 test("a one-word name alone isn't enough to call it one person", () => {

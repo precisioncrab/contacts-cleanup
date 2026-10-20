@@ -17,7 +17,7 @@
 import { h, plural } from "../dom.js";
 import { toolbar, row, avatar, cardSummary, emptyState, matches, tag } from "../parts.js";
 import { label } from "../../core/card.js";
-import { mergeOptions, mergeVCard, pairKey, groupLinks, apartPairs } from "../../core/duplicates.js";
+import { mergeOptions, mergeVCard, pairKey, groupLinks, apartPairs, personName } from "../../core/duplicates.js";
 
 const groupKey = (group) => group.cards.map((c) => c.id).sort().join("|");
 
@@ -143,14 +143,25 @@ async function applyGroup(ctx, group) {
   }
 }
 
-/** The person picker for one card: an existing person, or a new one. */
-function personPicker(ctx, m, card, people) {
-  const numbers = [...people.keys()];
-  const next = Math.max(...numbers) + 1;
+/** What each person is called: its fullest name, numbered when two people share one. */
+function personNames(people) {
+  const names = new Map();
+  const used = new Map();
+  for (const [n, members] of people) {
+    const name = personName(members);
+    used.set(name, (used.get(name) ?? 0) + 1);
+    names.set(n, used.get(name) > 1 ? `${name} (${used.get(name)})` : name);
+  }
+  return names;
+}
+
+/** "Move to..." for one card: another person, or a new one. */
+function movePicker(ctx, m, card, people, names) {
+  const here = m.assign[card.id];
+  const next = Math.max(...people.keys()) + 1;
   return h("select", {
-    class: "person-select",
-    "aria-label": `Person for ${label(card)}`,
-    style: { borderColor: personColor(m.assign[card.id]) },
+    class: "move-select",
+    "aria-label": `Move ${label(card)} to another person`,
     onClick: (e) => e.stopPropagation(),
     onChange: (e) => {
       m.assign[card.id] = Number(e.target.value);
@@ -158,31 +169,36 @@ function personPicker(ctx, m, card, people) {
       ctx.render();
     },
   },
-  numbers.map((n) => h("option", { value: n, selected: m.assign[card.id] === n }, `Person ${n}`)),
-  h("option", { value: next }, "New person"));
+  h("option", { value: "", selected: true, disabled: true }, "Move to…"),
+  [...people.keys()].filter((n) => n !== here).map((n) => h("option", { value: n }, names.get(n))),
+  people.get(here).length > 1 ? h("option", { value: next }, "A new person (its own card)") : null);
 }
 
-function sortSection(ctx, m, group, people, links) {
+/** One column per person, its cards in it. */
+function sortSection(ctx, m, group, people, links, names) {
   return h("div", { class: "page-section" },
-    h("div", { class: "label" }, "Who is who"),
-    h("p", { class: "hint" }, "Put cards of the same person in the same person. A person with one card is left as it is. Different people won't show as duplicates of each other again."),
-    [...people].map(([n, members]) => h("div", { class: "person" },
-      h("div", { class: "person-head" },
-        personDot(n),
-        h("strong", {}, `Person ${n}`),
-        h("span", { class: "from" }, members.length > 1 ? `${plural(members.length, "card", "cards")}, merged into one` : "left as it is")),
-      members.map((card) => h("div", { class: "person-card" },
-        avatar(card),
-        h("div", { class: "title-col" },
-          h("div", { class: "title" }, label(card), h("span", { class: "from" }, `  ${card.bookName}`)),
-          h("div", { class: "meta" }, linkText(card, links) || "no shared details")),
-        personPicker(ctx, m, card, people))))));
+    h("div", { class: "label" }, people.size > 1 ? "1. Who is who" : "1. Is it one person?"),
+    h("div", { class: "people-board" },
+      [...people].map(([n, members]) => h("div", { class: "person", style: { borderTopColor: personColor(n) } },
+        h("div", { class: "person-head" },
+          personDot(n),
+          h("strong", {}, names.get(n)),
+          h("span", { class: "from" }, members.length > 1 ? `${members.length} cards, merged into one` : "1 card, left as it is")),
+        members.map((card) => h("div", { class: "person-card" },
+          avatar(card),
+          h("div", { class: "title-col" },
+            h("div", { class: "title" }, label(card)),
+            h("div", { class: "book" }, card.bookName),
+            h("div", { class: "meta" }, linkText(card, links) || "shares nothing with the others"),
+            people.size > 1 || members.length > 1 ? movePicker(ctx, m, card, people, names) : null)))))));
 }
 
-function editorSection(ctx, m, group, people) {
+function editorSection(ctx, m, group, people, names) {
   const merges = [...people].filter(([, members]) => members.length > 1);
   if (!merges.length) {
-    return h("div", { class: "notice" }, "Nothing to merge: every card stays as it is. Apply keeps them apart, so they won't show as duplicates of each other again.");
+    return h("div", { class: "page-section" },
+      h("div", { class: "label" }, "2. Merge"),
+      h("div", { class: "notice" }, "Nothing to merge: every card is a different person and stays as it is. Keep them apart marks them as not duplicates, so this group won't come back."));
   }
   if (!merges.some(([n]) => n === m.active)) {
     m.active = merges[0][0];
@@ -198,15 +214,17 @@ function editorSection(ctx, m, group, people) {
   const section = (title, ...body) => h("div", { class: "page-section" }, h("div", { class: "label" }, title), body);
 
   return [
-    merges.length > 1 || people.size > 1
-      ? h("div", { class: "view-tabs person-tabs" }, merges.map(([n, list]) => h("button", {
-        class: n === m.active ? "active" : "",
-        onClick: () => {
-          m.active = n;
-          ctx.render();
-        },
-      }, personDot(n), ` Person ${n}: ${editorFor(m, n, list).name || label(list[0])}`)))
-      : null,
+    h("div", { class: "page-section" },
+      h("div", { class: "label" }, merges.length > 1 ? "2. Merge each person (one tab per person)" : `2. Merge ${names.get(m.active)}'s cards`),
+      merges.length > 1
+        ? h("div", { class: "view-tabs person-tabs" }, merges.map(([n]) => h("button", {
+          class: n === m.active ? "active" : "",
+          onClick: () => {
+            m.active = n;
+            ctx.render();
+          },
+        }, personDot(n), ` ${names.get(n)}`)))
+        : null),
 
     section("Keep this card",
       members.map((card) => h("div", { class: "choice" },
@@ -295,21 +313,27 @@ function groupPage(ctx, group) {
   }
   const { people, merges } = plan(m, group.cards);
   const links = groupLinks(group.cards);
+  const names = personNames(people);
   const one = people.size === 1;
-  const summary = [...people].map(([n, members]) => (members.length > 1 ? `Person ${n}: ${members.length} cards into one` : `Person ${n}: left as it is`)).join(". ");
+  const count = plural(group.cards.length, "card", "cards");
+  const intro = one
+    ? `These ${count} look like one person, ${names.get([...people.keys()][0])}. They're grouped because they share details (shown under each card). If a card belongs to someone else, use its Move to menu: it gets a column of its own. Then check what the merged card keeps (step 2) and click Merge into one.`
+    : `These ${count} share details (shown under each card), but look like ${people.size} different people: one column each. If a card is in the wrong column, use its Move to menu. Each person's cards are merged into one card; a person with one card is left as it is. Then check each merge (step 2) and click Apply.`;
+  const summary = [...people].map(([n, members]) => (members.length > 1 ? `${names.get(n)}: ${members.length} cards into one` : `${names.get(n)}: left as it is`)).join(". ");
   return [
     h("div", { class: "toolbar" },
       h("button", { onClick: () => {
         ctx.state.merge = null;
         ctx.render();
       } }, "‹ Back"),
-      h("h2", { style: { flex: "1" } }, one ? `Merge ${plural(group.cards.length, "card", "cards")}` : `Sort and merge ${plural(group.cards.length, "card", "cards")}`),
+      h("h2", { style: { flex: "1" } }, one ? `Merge ${count}` : `Who is who: ${count}`),
       h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: () => applyGroup(ctx, group) },
         ctx.state.busy ? "Saving…" : one ? "Merge into one" : merges.length ? "Apply" : "Keep them apart")),
     one ? null : h("div", { class: "toolbar-filters" }, h("span", {}, `${summary}.`)),
     h("div", { class: "page", "data-scroll": "merge" },
-      sortSection(ctx, m, group, people, links),
-      editorSection(ctx, m, group, people)),
+      h("div", { class: "notice intro" }, intro),
+      sortSection(ctx, m, group, people, links, names),
+      editorSection(ctx, m, group, people, names)),
   ];
 }
 
@@ -326,11 +350,17 @@ export default {
       return groupPage(ctx, open);
     }
     const groups = visibleGroups(ctx);
+    const across = Boolean(ctx.state.settings.duplicatesAcrossBooks);
     return [
       toolbar(ctx, { title: "Duplicates" }),
+      h("div", { class: "toolbar-filters" },
+        h("label", { title: "Off: the same person in two address books (a synced book and a local one, say) isn't a duplicate." },
+          h("input", { type: "checkbox", checked: across, onChange: (e) => ctx.saveSettings({ duplicatesAcrossBooks: e.target.checked }) }),
+          "Also match cards in different address books"),
+        h("span", {}, across ? "Merging across address books deletes cards from the other books." : "Only cards in the same address book are compared.")),
       h("div", { class: "list", "data-scroll": "list" },
         groups.length === 0
-          ? emptyState(ctx.state.search ? "Nothing matches the search." : "No duplicates found.", ctx.state.search ? "" : "Cards with the same email address, phone number, chat address or name show here.")
+          ? emptyState(ctx.state.search ? "Nothing matches the search." : "No duplicates found.", ctx.state.search ? "" : `Cards in ${across ? "your address books" : "the same address book"} with the same email address, phone number, chat address or name show here.`)
           : groups.map((group) => {
             const count = peopleCount(group.suggested);
             return row(ctx, {
@@ -339,12 +369,12 @@ export default {
               title: [...new Set(group.cards.map(label))].join(", "),
               meta: [
                 h("span", {}, plural(group.cards.length, "card", "cards")),
-                count > 1 ? tag(`looks like ${count} people`, "warn") : null,
+                count > 1 ? tag(`looks like ${count} people`, "warn") : group.cards.length > 2 ? tag("looks like 1 person", "plain") : null,
                 h("span", {}, group.reasons.join(", ")),
                 new Set(group.cards.map((c) => c.bookName)).size > 1 ? h("span", {}, [...new Set(group.cards.map((c) => c.bookName))].join(" and ")) : null,
               ],
               actions: [
-                h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: () => openGroup(ctx, group) }, count > 1 ? "Sort and merge" : "Review and merge"),
+                h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: () => openGroup(ctx, group) }, count > 1 || group.cards.length > 2 ? "Sort and merge" : "Review and merge"),
                 h("button", { onClick: () => dismiss(ctx, group) }, "Not duplicates"),
               ],
             });
@@ -355,18 +385,22 @@ export default {
   detail(ctx) {
     if (ctx.state.merge) {
       return [
-        h("h3", {}, "Sorting into people"),
-        h("p", {}, "Every card in the group gets a person. Cards of the same person are merged into one card; a person with one card is left as it is. To split a group, pick New person for the cards that aren't the same person."),
-        h("p", {}, "The first sort uses the strongest matches only: the same email or chat address, or the same phone number with a matching first name (Sam and Sammy, J and Jane), or the same full name. A shared home number, a shared family name or a one-word name like Mom isn't enough, so those start as separate people. Check it and move cards where it's wrong."),
-        h("p", {}, "Under each card: what it shares, and with whom."),
-        h("p", {}, "Apply merges every person at once and keeps the people apart, so they don't show as duplicates of each other again. Undo (Edit > Undo, or Changes) puts every card back and lets them group again."),
+        h("h3", {}, "How this page works"),
+        h("ol", {},
+          h("li", {}, "Each column is one person, with the cards that belong to them. Under each card: what it shares, and with whom."),
+          h("li", {}, "A card in the wrong column? Its Move to menu puts it with another person, or gives it a column of its own."),
+          h("li", {}, "Step 2 shows what each merged card keeps: every value starts checked."),
+          h("li", {}, "Apply (or Merge into one) merges each column into one card. A column with one card is left as it is. People in different columns won't be grouped again."),
+          h("li", {}, "Undo (Edit > Undo, or Changes) puts every card back.")),
+        h("h4", {}, "How the columns were guessed"),
+        h("p", {}, "Cards go together on the strongest matches: the same email or chat address, or the same phone number with a matching first name (Sam and Sammy, J and Jane), or the same full name. A shared home number with different first names, a shared family name, or a one-word name like Mom starts as separate people. Two people whose names clash are never put together."),
       ];
     }
     const group = ctx.derived.duplicates.find((g) => groupKey(g) === ctx.state.selected);
     if (!group) {
       return [
         h("h3", {}, "Duplicates"),
-        h("p", {}, "Cards that look like the same person: the same email address, phone number (in any format) or chat address, or the same name. Groups can span address books."),
+        h("p", {}, "Cards in the same address book that look like the same person: the same email address, phone number (in any format) or chat address, or the same name. The same person in two address books isn't a duplicate, unless you check Also match cards in different address books."),
         h("p", {}, "A group can hold more than one person, for example a family sharing a home number. Sort and merge lets you say who is who, then merges each person's cards."),
         h("p", {}, "Not duplicates hides a whole group for good."),
         h("div", { class: "no-selection" }, "Select a group to see its cards."),
@@ -377,11 +411,11 @@ export default {
     return [
       h("h3", {}, people.size > 1 ? `${plural(group.cards.length, "card", "cards")}, looks like ${people.size} people` : `${plural(group.cards.length, "card", "cards")}: ${group.reasons.join(", ")}`),
       [...people].map(([n, members]) => [
-        people.size > 1 ? h("h4", { class: "person-head" }, personDot(n), ` Person ${n}`) : null,
+        people.size > 1 ? h("h4", { class: "person-head" }, personDot(n), ` ${personName(members)}`) : null,
         members.map((card) => h("div", { style: { marginBottom: "12px" } }, cardSummary(card))),
       ]),
       h("div", { class: "detail-actions" },
-        h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: () => openGroup(ctx, group) }, people.size > 1 ? "Sort and merge" : "Review and merge"),
+        h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: () => openGroup(ctx, group) }, people.size > 1 || group.cards.length > 2 ? "Sort and merge" : "Review and merge"),
         h("button", { onClick: () => dismiss(ctx, group) }, "Not duplicates")),
     ];
   },

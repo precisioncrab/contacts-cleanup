@@ -36,7 +36,7 @@ import about from "./views/about.js";
 
 const VIEWS = { duplicates, phones, names, chat, chatContacts, history: changesView, about };
 
-const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY };
+const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false };
 
 const state = {
   view: "duplicates",
@@ -91,7 +91,7 @@ const ctx = {
 function recompute() {
   const s = state.settings;
   const country = countryById(s.country);
-  derived.duplicates = findDuplicates(state.cards, state.dismissed)
+  derived.duplicates = findDuplicates(state.cards, state.dismissed, { acrossBooks: s.duplicatesAcrossBooks })
     .map((group) => ({ ...group, suggested: suggestPeople(group.cards, state.dismissed) }));
   derived.phones = state.cards
     .map((card) => ({ card, ...phoneFixes(card, { style: s.phoneStyle, country }) }))

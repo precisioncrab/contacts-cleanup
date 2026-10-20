@@ -355,17 +355,22 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .page-section textarea { min-height: 70px; resize: vertical; }
 .page p { line-height: 1.55; color: var(--text-2); max-width: 680px; }
 .page .hint, .page-section .hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
-.person { max-width: 760px; margin-top: 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-card); }
+.notice.intro { margin-top: 8px; max-width: none; font-size: 13px; }
+.people-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; align-items: start; }
+.person { border: 1px solid var(--border-strong); border-top-width: 4px; border-radius: 8px; background: var(--bg-card); min-width: 0; }
+.person-card .book { font-size: 11px; color: var(--text-meta); }
+select.move-select { width: auto !important; max-width: 100% !important; margin-top: 6px; font-size: 12px !important; padding: 3px 6px; }
+.detail-panel ol { margin: 0 0 10px; padding-left: 18px; color: var(--text-2); font-size: 12px; line-height: 1.5; }
+.detail-panel ol li { margin-bottom: 4px; }
 .person-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .person-head .from, .person-card .from { color: var(--text-meta); font-size: 11px; font-weight: normal; }
 h4.person-head { border-bottom: none; padding: 0; margin: 14px 0 6px; }
-.person-card { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.person-card { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .person-card:last-child { border-bottom: none; }
 .person-card .title-col { flex: 1; min-width: 0; }
 .person-card .title { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person-card .meta { font-size: 11px; color: var(--text-meta); margin-top: 2px; overflow-wrap: anywhere; }
-select.person-select { width: auto !important; max-width: 140px; border-width: 1px 1px 1px 4px; flex-shrink: 0; }
-.person-tabs { margin: 18px 0 0; padding: 0; max-width: 760px; flex-wrap: wrap; }
+.person-tabs { margin: 6px 0 0; padding: 0; flex-wrap: wrap; }
 .person-tabs button { display: inline-flex; align-items: center; gap: 4px; }
 .notice {
   max-width: 680px; margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
