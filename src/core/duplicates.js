@@ -22,7 +22,7 @@
 
 import {
   parseVCard, parseLine, serializeVCard, getAll, first, setValue, makeProp, insertProp, removeProp,
-  withoutGroupAndParams, unescapeText, escapeText, splitStructured,
+  withoutGroupAndParams, unescapeText, escapeText, splitStructured, typesOf,
 } from "./vcard.js";
 import { isRealName, label, nameFromParts } from "./card.js";
 import { phoneKey } from "./phone.js";
@@ -273,6 +273,38 @@ export const MULTI = [
   { name: "URL", label: "Websites", key: (p) => unescapeText(p.value).trim().toLowerCase().replace(/\/$/, "") },
 ];
 
+/** An address's seven parts (PO box, extended, street, city, region, postal code, country), unescaped. */
+export function adrParts(value) {
+  const parts = splitStructured(value);
+  while (parts.length < 7) {
+    parts.push("");
+  }
+  return parts.slice(0, 7);
+}
+
+/** A value as typed, written for its field: an address from its parts; URIs (websites, chat addresses) as they are. */
+function encodeValue(name, value) {
+  if (name === "ADR") {
+    const parts = [...value];
+    while (parts.length < 7) {
+      parts.push("");
+    }
+    return parts.slice(0, 7).map((p) => escapeText(String(p).trim())).join(";");
+  }
+  return name === "URL" || name === "IMPP" ? String(value).trim() : escapeText(String(value).trim());
+}
+
+/** Whether a typed value is empty (an address with no parts). */
+const isEmptyValue = (value) => (Array.isArray(value) ? value.every((p) => !String(p).trim()) : !String(value ?? "").trim());
+
+/** The types offered for a value added during a merge, as Thunderbird's card editor names them. */
+export const ADD_TYPES = {
+  TEL: [["cell", "Mobile"], ["home", "Home"], ["work", "Work"], ["fax", "Fax"], ["", "Other"]],
+  EMAIL: [["home", "Home"], ["work", "Work"], ["", "Other"]],
+  ADR: [["home", "Home"], ["work", "Work"], ["", "Other"]],
+  URL: [["", "Website"]],
+};
+
 /** Fields with one value; one card's is picked. */
 export const SINGLE = [
   { name: "ORG", label: "Organization" },
@@ -317,7 +349,7 @@ export function mergeOptions(cards) {
         const key = field.key(prop);
         if (key && !seen.has(key)) {
           seen.add(key);
-          values.push({ key, text: display(prop), from: card.id });
+          values.push({ key, text: display(prop), from: card.id, type: typesOf(prop).find((t) => t !== "pref" && t !== "voice") ?? "", ...(field.name === "ADR" ? { parts: adrParts(prop.value) } : {}) });
         }
       }
     }
@@ -371,6 +403,9 @@ function categoriesOf(cards) {
  * @param {Object<string, Set<string>|string[]>} choice.multi - field name -> the value keys kept
  * @param {Object<string, string|null>} choice.single - field name -> the value kept ("" or null: none)
  * @param {string} choice.note - the note
+ * @param {Object<string, Object<string, string|string[]>>} [choice.edits] - field name -> value key -> the value as edited
+ *   (an address as its seven parts); an emptied value is left out
+ * @param {Object<string, {value: string|string[], type: string}[]>} [choice.added] - field name -> values added during the merge
  */
 export function mergeVCard(cards, keeperId, choice) {
   const keeper = cards.find((c) => c.id === keeperId);
@@ -408,16 +443,31 @@ export function mergeVCard(cards, keeperId, choice) {
     }
   }
 
-  // Fields with several values: drop what wasn't kept, add the others' kept values.
+  // Fields with several values: drop what wasn't kept, add the others' kept
+  // values, make the edits (the line keeps its type), add new values.
   for (const field of MULTI) {
     const kept = new Set(choice.multi?.[field.name] ?? []);
+    const edits = choice.edits?.[field.name] ?? {};
     const have = new Set();
+    // An edited value replaces the line's value; an emptied one drops the line.
+    const edit = (prop, key) => {
+      if (!(key in edits)) {
+        return true;
+      }
+      if (isEmptyValue(edits[key])) {
+        removeProp(vcard, prop);
+        return false;
+      }
+      setValue(prop, encodeValue(field.name, edits[key]));
+      return true;
+    };
     for (const prop of getAll(vcard, field.name)) {
       const key = field.key(prop);
       if (!kept.has(key) || have.has(key)) {
         removeProp(vcard, prop);
       } else {
         have.add(key);
+        edit(prop, key);
       }
     }
     for (const card of others) {
@@ -426,8 +476,13 @@ export function mergeVCard(cards, keeperId, choice) {
         if (kept.has(key) && !have.has(key)) {
           have.add(key);
           // PREF stays with the kept card's own values.
-          insertProp(vcard, withoutGroupAndParams(prop, ["PREF"]), "FN");
+          edit(insertProp(vcard, withoutGroupAndParams(prop, ["PREF"]), "FN"), key);
         }
+      }
+    }
+    for (const { value, type } of choice.added?.[field.name] ?? []) {
+      if (!isEmptyValue(value)) {
+        insertProp(vcard, makeProp(field.name, encodeValue(field.name, value), type ? [{ key: "TYPE", value: type }] : []), "FN");
       }
     }
   }

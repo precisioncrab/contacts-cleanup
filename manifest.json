@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Contacts Cleanup",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Cleans up your address book: duplicate contacts, phone numbers in one format, missing names, and XMPP chat addresses on cards.",
   "author": "Precision Crab",
   "homepage_url": "https://github.com/precisioncrab/contacts-cleanup",

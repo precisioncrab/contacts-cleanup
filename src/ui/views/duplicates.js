@@ -18,7 +18,13 @@
 import { h, plural } from "../dom.js";
 import { toolbar, row, avatar, cardSummary, emptyState, matches, tag } from "../parts.js";
 import { label } from "../../core/card.js";
-import { mergeOptions, mergeVCard, pairKey, groupLinks } from "../../core/duplicates.js";
+import { mergeOptions, mergeVCard, pairKey, groupLinks, MULTI, ADD_TYPES } from "../../core/duplicates.js";
+
+/** How a value's type reads next to it. */
+const TYPE_NAMES = { cell: "mobile", mobile: "mobile", iphone: "mobile", home: "home", work: "work", fax: "fax", pager: "pager", main: "main", other: "other" };
+
+/** The "+ Add" buttons under fields with several values. */
+const ADD_LABELS = { TEL: "+ Add a phone number", EMAIL: "+ Add an email address", ADR: "+ Add an address", URL: "+ Add a website" };
 
 const groupKey = (group) => group.cards.map((c) => c.id).sort().join("|");
 
@@ -77,6 +83,9 @@ function defaultsFor(cards, options, keeperId) {
     single,
     multi,
     note: (options.notes.find((n) => n.from === keeperId) ?? options.notes[0])?.text ?? "",
+    // Values edited (field -> value key -> text, or an address's parts) and added during the merge.
+    edits: {},
+    added: {},
   };
 }
 
@@ -111,7 +120,7 @@ async function merge(ctx, group) {
   const keeper = cards.find((c) => c.id === ed.keeperId) ?? cards[0];
   const name = ed.name.trim() || label(keeper);
   const vCard = mergeVCard(cards, keeper.id, {
-    name, given: ed.given.trim(), family: ed.family.trim(), multi: ed.multi, single: ed.single, note: ed.note,
+    name, given: ed.given.trim(), family: ed.family.trim(), multi: ed.multi, single: ed.single, note: ed.note, edits: ed.edits, added: ed.added,
   });
   const left = group.cards.filter((c) => !m.checked.has(c.id)).map((c) => c.id);
   const entry = await ctx.apply(`Merged ${plural(cards.length, "card", "cards")} into ${name}`, [
@@ -221,7 +230,7 @@ function groupPage(ctx, group) {
               name: "keeper",
               checked: ed.keeperId === card.id,
               onChange: () => {
-                Object.assign(ed, defaultsFor(checked, ed.options, card.id), { multi: ed.multi, name: ed.name, given: ed.given, family: ed.family });
+                Object.assign(ed, defaultsFor(checked, ed.options, card.id), { multi: ed.multi, name: ed.name, given: ed.given, family: ed.family, edits: ed.edits, added: ed.added });
                 ctx.render();
               },
             }),
@@ -239,6 +248,30 @@ function groupPage(ctx, group) {
   ];
 }
 
+/** An address as Street, City, State, Postal code and Country boxes; PO box and extended parts are kept as they are. */
+function addressEditor(id, parts, onChange, disabled) {
+  const current = [...parts];
+  const box = (index, placeholder, extra = "") => h("input", {
+    type: "text",
+    id: `${id}-${extra || index}`,
+    class: extra,
+    value: current[index] ?? "",
+    placeholder,
+    disabled,
+    "aria-label": placeholder,
+    onInput: (e) => {
+      current[index] = e.target.value;
+      onChange([...current]);
+    },
+  });
+  return h("div", { class: "adr-edit" },
+    box(2, "Street", "street"),
+    box(3, "City"),
+    box(4, "State or region"),
+    box(5, "Postal code"),
+    box(6, "Country"));
+}
+
 /** Step 3: what the merged card has, every field editable or pickable. */
 function mergeDetails(ctx, ed, cards, section) {
   const byId = new Map(cards.map((c) => [c.id, c]));
@@ -252,7 +285,7 @@ function mergeDetails(ctx, ed, cards, section) {
   const field = (label, ...body) => h("div", { class: "field" }, h("span", { class: "field-label" }, label), h("div", { class: "field-value" }, body));
 
   return section("3. Choose what the merged card has",
-    h("p", { class: "hint" }, "Rename it here if you like. Everything starts checked, so nothing is lost unless you uncheck it."),
+    h("p", { class: "hint" }, "Rename it, fix a number or an address: every box can be edited. Everything starts checked, so nothing is lost unless you uncheck it."),
     h("div", { class: "fields" },
       field("Name", text("merge-name", ed.name, (v) => {
         ed.name = v;
@@ -273,18 +306,62 @@ function mergeDetails(ctx, ed, cards, section) {
         h("option", { value: "", selected: !ed.single[f.name] }, "(none)"),
         f.values.map((v) => h("option", { value: v.text, selected: ed.single[f.name] === v.text }, `${v.text}  (${from(v.from)})`)))))),
 
-    ed.options.multi.map((f) => h("div", { class: "page-section" },
-      h("div", { class: "label" }, f.label),
-      f.values.map((v) => h("label", { class: "choice" },
-        h("input", {
-          type: "checkbox",
-          checked: ed.multi[f.name]?.has(v.key),
-          onChange: (e) => {
-            ed.multi[f.name][e.target.checked ? "add" : "delete"](v.key);
-          },
+    MULTI.map((f) => {
+      const values = ed.options.multi.find((m) => m.name === f.name)?.values ?? [];
+      const added = ed.added[f.name] ?? [];
+      if (!values.length && !added.length && !ADD_LABELS[f.name]) {
+        return null;
+      }
+      return h("div", { class: "page-section" },
+        h("div", { class: "label" }, f.label),
+        values.map((v, i) => {
+          const on = ed.multi[f.name]?.has(v.key);
+          const edited = ed.edits[f.name]?.[v.key];
+          const setEdit = (value) => {
+            ed.edits[f.name] = { ...ed.edits[f.name], [v.key]: value };
+          };
+          return h("div", { class: `value-row${on ? "" : " off"}` },
+            h("input", {
+              type: "checkbox",
+              checked: on,
+              "aria-label": `Keep ${v.text}`,
+              onChange: (e) => {
+                ed.multi[f.name][e.target.checked ? "add" : "delete"](v.key);
+                ctx.render();
+              },
+            }),
+            f.name === "ADR"
+              ? addressEditor(`edit-adr-${i}`, edited ?? v.parts, setEdit, !on)
+              : h("input", { type: "text", id: `edit-${f.name}-${i}`, value: edited ?? v.text, disabled: !on, "aria-label": f.label, onInput: (e) => setEdit(e.target.value) }),
+            v.type ? tag(TYPE_NAMES[v.type] ?? v.type, "plain") : null,
+            h("span", { class: "from" }, from(v.from)));
         }),
-        h("span", {}, v.text),
-        h("span", { class: "from" }, from(v.from)))))),
+        added.map((a, i) => h("div", { class: "value-row" },
+          h("span", { class: "new-mark" }, "new"),
+          f.name === "ADR"
+            ? addressEditor(`add-adr-${i}`, a.value, (value) => {
+              a.value = value;
+            }, false)
+            : h("input", { type: "text", id: `add-${f.name}-${i}`, value: a.value, placeholder: f.label.replace(/s$/, ""), "aria-label": `New ${f.label}`, onInput: (e) => {
+              a.value = e.target.value;
+            } }),
+          ADD_TYPES[f.name]?.length > 1
+            ? h("select", { class: "type-select", "aria-label": "Type", onChange: (e) => {
+              a.type = e.target.value;
+            } }, ADD_TYPES[f.name].map(([value, text]) => h("option", { value, selected: a.type === value }, text)))
+            : null,
+          h("button", { class: "link", title: "Remove", "aria-label": "Remove", onClick: () => {
+            ed.added[f.name].splice(i, 1);
+            ctx.render();
+          } }, "\u2715"))),
+        ADD_LABELS[f.name]
+          ? h("button", { class: "link add-value", onClick: () => {
+            ed.added[f.name] = [...added, { value: f.name === "ADR" ? ["", "", "", "", "", "", ""] : "", type: ADD_TYPES[f.name]?.[0]?.[0] ?? "" }];
+            ctx.render();
+            document.getElementById(f.name === "ADR" ? `add-adr-${added.length}-street` : `add-${f.name}-${added.length}`)?.focus();
+          } }, ADD_LABELS[f.name])
+          : null);
+    }),
 
     h("div", { class: "page-section" },
       h("div", { class: "label" }, "Note"),
@@ -351,7 +428,7 @@ export default {
         h("ol", {},
           h("li", {}, "Check the cards that are the same person."),
           h("li", {}, "Pick the card to keep."),
-          h("li", {}, "Choose what the merged card has, and rename it if you like."),
+          h("li", {}, "Choose what the merged card has. Every detail can be edited: rename it, fix a number or an address, or add one."),
           h("li", {}, "Click Merge.")),
         h("p", {}, "Unchecked cards are left as they are. If some of them are duplicates of each other, this page stays open on them afterwards, for another merge."),
         h("p", {}, "Delete on a card removes just that card, for a copy you don't want at all."),

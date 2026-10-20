@@ -371,6 +371,16 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .field { display: contents; }
 .field-label { font-size: 12px; color: var(--text-muted); }
 .field-value input[type="text"], .field-value select { width: 100%; font-size: 13px; }
+.value-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; max-width: 760px; }
+.page-section .value-row input[type="text"] { width: auto; flex: 1; max-width: 340px; }
+.value-row.off input[type="text"] { opacity: .45; }
+.value-row .from { color: var(--text-meta); font-size: 11px; }
+.value-row .new-mark { width: 16px; font-size: 10px; color: var(--chip-text); text-align: center; flex-shrink: 0; }
+.adr-edit { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; flex: 1; max-width: 560px; }
+.adr-edit .street { grid-column: 1 / -1; }
+.page-section .adr-edit input[type="text"] { width: 100%; max-width: none; }
+.page-section select.type-select { width: auto; font-size: 12px; }
+.add-value { margin: 6px 0 0 24px; font-size: 12px; }
 .merge-bar { display: flex; align-items: center; gap: 12px; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); max-width: 760px; }
 .detail-panel ol { margin: 0 0 10px; padding-left: 18px; color: var(--text-2); font-size: 12px; line-height: 1.5; }
 .detail-panel ol li { margin-bottom: 4px; }

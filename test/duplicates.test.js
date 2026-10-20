@@ -236,6 +236,43 @@ test("the merged card can be renamed: display, first and last name", () => {
   assert.equal(org.org, "New Co");
 });
 
+test("values can be edited, emptied and added while merging; each line keeps its type", () => {
+  const keeper = card(["FN:Jane Doe", "TEL;TYPE=cell:(555) 123-4567", "EMAIL:jane@example.org", "ADR;TYPE=home:;;1 Main St;Springfield;IL;55555;USA"], { id: "k" });
+  const other = card(["FN:Jane Doe", "TEL;TYPE=work:555-987-6543", "URL:https://example.org/old"], { id: "o" });
+  const options = mergeOptions([keeper, other]);
+  const key = (name, text) => options.multi.find((f) => f.name === name).values.find((v) => v.text.startsWith(text)).key;
+  const adr = options.multi.find((f) => f.name === "ADR").values[0];
+  assert.deepEqual(adr.parts, ["", "", "1 Main St", "Springfield", "IL", "55555", "USA"]);
+  assert.equal(options.multi.find((f) => f.name === "TEL").values[0].type, "cell");
+  const multi = Object.fromEntries(options.multi.map((f) => [f.name, f.values.map((v) => v.key)]));
+  const text = mergeVCard([keeper, other], "k", {
+    name: "Jane Doe",
+    multi,
+    single: {},
+    note: "",
+    edits: {
+      TEL: { [key("TEL", "(555)")]: "+1 555 123 9999", [key("TEL", "555-987")]: "+1 555 987 0000" },
+      ADR: { [adr.key]: ["", "", "2 Oak Ave, Apt 3", "Springfield", "IL", "55556", "USA"] },
+      URL: { [key("URL", "https")]: "  " },
+    },
+    added: {
+      TEL: [{ value: "555-222-1111", type: "home" }, { value: "", type: "work" }],
+      EMAIL: [{ value: "jane.doe@work.example.org", type: "work" }],
+    },
+  });
+  const merged = parseVCard(text);
+  assert.deepEqual(getAll(merged, "TEL").map((p) => p.raw), [
+    "TEL;TYPE=cell:+1 555 123 9999",
+    "TEL;TYPE=work:+1 555 987 0000",
+    "TEL;TYPE=home:555-222-1111",
+  ]);
+  assert.deepEqual(getAll(merged, "ADR").map((p) => p.raw), ["ADR;TYPE=home:;;2 Oak Ave\\, Apt 3;Springfield;IL;55556;USA"]);
+  assert.deepEqual(getAll(merged, "EMAIL").map((p) => p.raw), ["EMAIL:jane@example.org", "EMAIL;TYPE=work:jane.doe@work.example.org"]);
+  assert.equal(getAll(merged, "URL").length, 0);
+  // Read back, the edited address has its parts.
+  assert.equal(readCard({ id: "k", vCard: text }).phones.length, 3);
+});
+
 test("the kept card gets a name and N from the others when it has none", () => {
   const keeper = card(["EMAIL:jane@example.org"], { id: "k" });
   const other = card(["FN:Jane Doe", "N:Doe;Jane;;;", "EMAIL:jane@example.org"], { id: "o" });
