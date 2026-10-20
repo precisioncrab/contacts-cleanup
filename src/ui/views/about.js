@@ -46,7 +46,7 @@ export default {
   detail() {
     return [
       h("h3", {}, "Where it runs"),
-      h("p", {}, "Contacts Cleanup opens as a tab, from its toolbar button or Tools > Contacts Cleanup. Thunderbird doesn't let add-ons on addons.thunderbird.net add buttons or right-click items inside the address book, so this tab's buttons do that work."),
+      h("p", {}, "Contacts Cleanup opens as a tab, from its button in the left sidebar (with Mail, Address Book and Calendar), its toolbar button, or Tools > Contacts Cleanup. Thunderbird doesn't let add-ons on addons.thunderbird.net add buttons or right-click items inside the address book, so this tab's buttons do that work."),
       h("h3", { style: { marginTop: "16px" } }, "Theme"),
       h("p", {}, "View > Theme: Match System follows Thunderbird's own light or dark theme."),
     ];

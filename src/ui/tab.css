@@ -123,7 +123,8 @@ button.primary { background: var(--accent-color); border-color: var(--accent-col
 button.primary:hover { background: var(--accent-hover); }
 button.primary:disabled { background: var(--selected-bg); border-color: var(--border-strong); color: var(--text-faint); cursor: default; }
 button:disabled { opacity: .55; cursor: default; }
-button.danger:hover { background: var(--danger-bg); border-color: var(--danger-border); }
+button.danger:hover { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+button.small { padding: 3px 9px; font-size: 11px; font-weight: normal; flex-shrink: 0; }
 button.link { background: none; border: none; color: var(--accent-color); padding: 0; font-weight: normal; }
 button.link:hover { text-decoration: underline; background: none; }
 

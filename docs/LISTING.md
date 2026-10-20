@@ -12,7 +12,7 @@ Cleans up your address book: merges duplicate contacts, puts phone numbers in on
 
 Contacts Cleanup tidies Thunderbird's address book and gets your contacts ready for chat. Nothing changes until you look at a proposed change and apply it, and every applied change can be undone.
 
-**Duplicates.** Finds cards that look like the same person: the same email address, the same phone number in any format, the same chat address, or the same name, across all your address books. You pick the card to keep and what it keeps; every value starts checked, so nothing is lost unless you uncheck it.
+**Duplicates.** Finds cards that look like the same person: the same email address, the same phone number in any format, the same chat address, or the same name, across all your address books. You check the cards that are really the same person, pick the card to keep and what it keeps (and rename it if you like), and click Merge; every value starts checked, so nothing is lost unless you uncheck it. A card you don't want at all can just be deleted.
 
 **Phone numbers in one format.** +1 555 123 4567, or compact +15551234567. Numbers without a country code are read as US and Canada, or another country you pick. Numbers with an extension are left alone.
 
@@ -24,7 +24,7 @@ Contacts Cleanup tidies Thunderbird's address book and gets your contacts ready 
 
 **Undo.** The Changes page lists everything applied, and Undo puts the cards back, deleted ones included.
 
-It opens as a tab from its toolbar button or Tools > Contacts Cleanup, in light or dark (it follows Thunderbird's theme, or pick one).
+It opens as a tab from its button in Thunderbird's left sidebar, its toolbar button or Tools > Contacts Cleanup, in light or dark (it follows Thunderbird's theme, or pick one).
 
 **What it can access:** your address books, to read cards and change the ones you apply changes to. It makes no network connections and sends nothing anywhere.
 
@@ -41,7 +41,7 @@ Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
 - Screenshots to take (made-up cards): Duplicates list, the merge page, Phone numbers, Chat addresses with the help panel, one in light and one in dark.
 
 ## Notes for the reviewer
-Contacts Cleanup uses only the addressBooks, addressBooks.contacts, menus and storage APIs. Changes are written with addressBooks.contacts.update and create (vCard text), always after the user clicks Apply; each card's previous vCard is kept in storage.local for undo. The Chat contacts page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
+Contacts Cleanup uses only the addressBooks, addressBooks.contacts, menus, spaces and storage APIs. Changes are written with addressBooks.contacts.update and create (vCard text), always after the user clicks Apply; each card's previous vCard is kept in storage.local for undo. The Chat contacts page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
 
 ## Open (maintainer)
 - The Chat contacts page and this description point to OMEMO for Thunderbird, which is installed from file and needs `xpinstall.signatures.required` turned off. A reviewer could object to sending people toward an unsigned add-on. Our text never mentions turning signatures off; that's on the OMEMO page itself. If a reviewer objects, the fallback is to drop the link from the listing and keep the in-app page.

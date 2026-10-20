@@ -10,7 +10,7 @@
  *   2. pick the card to keep,
  *   3. choose what the merged card has, renaming it if wanted,
  *   4. Merge.
- * One merge at a time. Cards left unchecked stay as they are; if they
+ * Or Delete on a card removes just that card. One merge at a time. Cards left unchecked stay as they are; if they
  * still look like duplicates, the page stays open on them for another
  * merge or "Not duplicates".
  */
@@ -118,16 +118,37 @@ async function merge(ctx, group) {
     { type: "update", id: keeper.id, vCard, label: name },
     ...cards.filter((c) => c !== keeper).map((c) => ({ type: "delete", id: c.id, label: label(c) })),
   ]);
-  if (!entry) {
-    return;
+  if (entry) {
+    stayOn(ctx, left);
   }
-  // Cards left unchecked that still look like duplicates: stay on them.
-  const next = left.length && ctx.derived.duplicates.find((g) => g.cards.some((c) => left.includes(c.id)));
-  if (next) {
-    openGroup(ctx, next);
-  } else {
+}
+
+/** Deletes one card (Undo brings it back), and stays on the rest, keeping their checks. */
+async function deleteCard(ctx, group, card) {
+  const checked = new Set(ctx.state.merge.checked);
+  const entry = await ctx.apply(`Deleted ${label(card)}`, [{ type: "delete", id: card.id, label: label(card) }]);
+  if (entry) {
+    stayOn(ctx, group.cards.filter((c) => c !== card).map((c) => c.id), checked);
+  }
+}
+
+/**
+ * After a merge or a delete: if the cards left still look like duplicates,
+ * the page stays on their group (with `checked` kept where it can be),
+ * else it goes back to the list.
+ */
+function stayOn(ctx, ids, checked = null) {
+  const next = ids.length && ctx.derived.duplicates.find((g) => g.cards.some((c) => ids.includes(c.id)));
+  if (!next) {
     ctx.state.merge = null;
     ctx.state.selected = null;
+    ctx.render();
+    return;
+  }
+  openGroup(ctx, next);
+  const kept = checked && [...checked].filter((id) => next.cards.some((c) => c.id === id));
+  if (kept?.length) {
+    ctx.state.merge.checked = new Set(kept);
     ctx.render();
   }
 }
@@ -166,8 +187,8 @@ function groupPage(ctx, group) {
     h("div", { class: "page", "data-scroll": "merge" },
       section("1. Check the cards that are the same person",
         h("p", { class: "hint" }, peopleCount(group) > 1
-          ? "These cards share some details, but may be more than one person (a shared home number, for example). The ones that look most alike are checked. Unchecked cards are left as they are."
-          : "These cards share some details. Uncheck any that aren't the same person; they're left as they are."),
+          ? "These cards share some details, but may be more than one person (a shared home number, for example). The ones that look most alike are checked. Unchecked cards are left as they are. Delete removes a card you don't want at all."
+          : "These cards share some details. Uncheck any that aren't the same person; they're left as they are. Delete removes a card you don't want at all."),
         h("div", { class: "dup-list" }, ordered.map((card) => h("label", { class: `dup-card${m.checked.has(card.id) ? " on" : ""}` },
           h("input", {
             type: "checkbox",
@@ -180,7 +201,17 @@ function groupPage(ctx, group) {
           avatar(card),
           h("div", { class: "title-col" },
             h("div", { class: "title" }, label(card), h("span", { class: "from" }, `  ${card.bookName}`)),
-            h("div", { class: "meta" }, linkText(card, links) || "shares nothing with the others")))))),
+            h("div", { class: "meta" }, linkText(card, links) || "shares nothing with the others")),
+          h("button", {
+            class: "danger small",
+            title: `Delete ${label(card)} (Undo brings it back)`,
+            disabled: Boolean(ctx.state.busy),
+            onClick: (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              deleteCard(ctx, group, card);
+            },
+          }, "Delete"))))),
 
       ready ? [
         section("2. Keep this card",
@@ -323,6 +354,7 @@ export default {
           h("li", {}, "Choose what the merged card has, and rename it if you like."),
           h("li", {}, "Click Merge.")),
         h("p", {}, "Unchecked cards are left as they are. If some of them are duplicates of each other, this page stays open on them afterwards, for another merge."),
+        h("p", {}, "Delete on a card removes just that card, for a copy you don't want at all."),
         h("p", {}, "Not duplicates: none of these cards are the same person, so they won't be shown together again."),
         h("p", {}, "Undo (the message after merging, Edit > Undo, or Changes) puts every card back."),
       ];

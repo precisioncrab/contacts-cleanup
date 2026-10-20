@@ -2,7 +2,7 @@
 
 A free Thunderbird add-on that tidies your address book and gets your contacts ready for chat:
 
-- **Duplicates:** lists potential duplicates: cards in the same address book with the same email address, phone number in any format, chat address, or name (the same person in two address books isn't a duplicate, unless you ask it to compare across address books). Review one: check the cards that are the same person (the ones that look most alike start checked), pick the card to keep, choose what the merged card has (rename it if you like; everything starts checked, so nothing is lost unless you uncheck it), and click Merge. Cards you leave unchecked stay as they are. "Not duplicates" hides a group for good.
+- **Duplicates:** lists potential duplicates: cards in the same address book with the same email address, phone number in any format, chat address, or name (the same person in two address books isn't a duplicate, unless you ask it to compare across address books). Review one: check the cards that are the same person (the ones that look most alike start checked), pick the card to keep, choose what the merged card has (rename it if you like; everything starts checked, so nothing is lost unless you uncheck it), and click Merge. Cards you leave unchecked stay as they are, and Delete on a card removes just that card. "Not duplicates" hides a group for good.
 - **Phone numbers:** puts every number in one format (`+1 555 123 4567`, or compact `+15551234567`). Numbers without a country code are read as US and Canada by default, or another country you pick.
 - **Missing names:** gives cards without a display name one, from the first and last name, the organization, the nickname or the email address. You can change each before applying.
 - **Chat addresses:** adds XMPP chat addresses to cards, written the way Thunderbird's card editor wants them (`xmpp:` in front). A checkbox per phone contact for its JMP.chat address (`xmpp:+15551234567@cheogram.com`, for texting and calling phone numbers from an XMPP account registered with JMP.chat), "Select all phone contacts", or "Generate JMP.chat address" for one person. Also fixes chat addresses other apps saved without `xmpp:` or in an X-JABBER field.
@@ -10,7 +10,7 @@ A free Thunderbird add-on that tidies your address book and gets your contacts r
 
 Nothing changes until you look at a proposed change and apply it, and every applied change can be undone (the Changes page, or Edit > Undo last change). Undo brings deleted cards back with their photos.
 
-It opens as a tab, from its toolbar button or Tools > Contacts Cleanup, in Thunderbird's light or dark theme (View > Theme).
+It opens as a tab, from its button in Thunderbird's left sidebar (next to Mail, Address Book and Calendar), its toolbar button, or Tools > Contacts Cleanup, in Thunderbird's light or dark theme (View > Theme).
 
 ## What it can access
 
