@@ -21,7 +21,7 @@ import { loadBooks, api, onAddressBookChange } from "../lib/addressbook.js";
 import { omemoClient } from "../lib/omemo.js";
 import { LINKS, openLink } from "../lib/links.js";
 import { readCard, label } from "../core/card.js";
-import { findDuplicates } from "../core/duplicates.js";
+import { findDuplicates, suggestPeople } from "../core/duplicates.js";
 import { phoneFixes, proposeName } from "../core/fixes.js";
 import { chatState, prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
@@ -91,7 +91,8 @@ const ctx = {
 function recompute() {
   const s = state.settings;
   const country = countryById(s.country);
-  derived.duplicates = findDuplicates(state.cards, state.dismissed);
+  derived.duplicates = findDuplicates(state.cards, state.dismissed)
+    .map((group) => ({ ...group, suggested: suggestPeople(group.cards, state.dismissed) }));
   derived.phones = state.cards
     .map((card) => ({ card, ...phoneFixes(card, { style: s.phoneStyle, country }) }))
     .filter((p) => p.fixes.length || p.skipped.length);
@@ -173,8 +174,10 @@ function trackGenerated(generated, direction) {
 
 /**
  * Applies changes to cards (src/core/history.js), records them for undo,
- * and offers Undo. `extra.generated` is { added, removed } chat addresses.
- * Returns the history entry, or null when nothing was changed.
+ * and offers Undo. `extra.generated` is { added, removed } chat addresses;
+ * `extra.dismissed` are duplicate pairs to keep apart once every change
+ * went through (a sorted group's people). Returns the history entry, or
+ * null when nothing was changed.
  */
 async function apply(title, changes, extra = {}) {
   if (!changes.length || state.busy) {
@@ -196,8 +199,12 @@ async function apply(title, changes, extra = {}) {
       };
       trackGenerated(entry.generated, +1);
     }
+    if (!error && extra.dismissed?.length) {
+      entry.dismissed = extra.dismissed.filter((pair) => !state.dismissed.has(pair));
+      entry.dismissed.forEach((pair) => state.dismissed.add(pair));
+    }
     state.history = addEntry(state.history, entry);
-    await browser.storage.local.set({ history: state.history, generated: state.generated });
+    await browser.storage.local.set({ history: state.history, generated: state.generated, dismissed: [...state.dismissed] });
   }
   state.busy = null;
   applying = false;
@@ -244,7 +251,9 @@ async function undo(entry) {
     if (entry.generated) {
       trackGenerated(entry.generated, -1);
     }
-    await browser.storage.local.set({ history: state.history, generated: state.generated });
+    // The people kept apart by this change may group again.
+    (entry.dismissed ?? []).forEach((pair) => state.dismissed.delete(pair));
+    await browser.storage.local.set({ history: state.history, generated: state.generated, dismissed: [...state.dismissed] });
   }
   state.busy = null;
   applying = false;

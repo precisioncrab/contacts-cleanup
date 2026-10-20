@@ -354,6 +354,19 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .page-section input[type="text"], .page-section textarea, .page-section select { width: 100%; max-width: 480px; font-size: 13px; }
 .page-section textarea { min-height: 70px; resize: vertical; }
 .page p { line-height: 1.55; color: var(--text-2); max-width: 680px; }
+.page .hint, .page-section .hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+.person { max-width: 760px; margin-top: 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-card); }
+.person-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.person-head .from, .person-card .from { color: var(--text-meta); font-size: 11px; font-weight: normal; }
+h4.person-head { border-bottom: none; padding: 0; margin: 14px 0 6px; }
+.person-card { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.person-card:last-child { border-bottom: none; }
+.person-card .title-col { flex: 1; min-width: 0; }
+.person-card .title { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-card .meta { font-size: 11px; color: var(--text-meta); margin-top: 2px; overflow-wrap: anywhere; }
+select.person-select { width: auto !important; max-width: 140px; border-width: 1px 1px 1px 4px; flex-shrink: 0; }
+.person-tabs { margin: 18px 0 0; padding: 0; max-width: 760px; flex-wrap: wrap; }
+.person-tabs button { display: inline-flex; align-items: center; gap: 4px; }
 .notice {
   max-width: 680px; margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
   background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text-2);

@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { card } from "./helpers.js";
-import { findDuplicates, mergeOptions, mergeVCard, nameKey, pairKey } from "../src/core/duplicates.js";
+import { findDuplicates, mergeOptions, mergeVCard, nameKey, pairKey, namesCompatible, groupLinks, suggestPeople, apartPairs } from "../src/core/duplicates.js";
 import { parseVCard, getAll, first } from "../src/core/vcard.js";
 import { readCard } from "../src/core/card.js";
 
@@ -47,6 +47,58 @@ test("read-only cards and names that are only an address are left out", () => {
   const c = card(["FN:x@example.org"], { id: "c" });
   const d = card(["FN:x@example.org"], { id: "d" });
   assert.deepEqual(ids(findDuplicates([a, b, c, d])), []);
+});
+
+test("names that could be one person, and names that can't", () => {
+  const c = (name, extra = []) => card([`FN:${name}`, ...extra]);
+  assert.equal(namesCompatible(c("Sam Roe"), c("Sammy Roe")), true);
+  assert.equal(namesCompatible(c("Jane Doe"), c("J Doe")), true);
+  assert.equal(namesCompatible(c("Jane Doe"), c("Doe, Jane")), true);
+  assert.equal(namesCompatible(c("Jane Doe"), c("jane@example.org", ["EMAIL:jane@example.org"])), true);
+  assert.equal(namesCompatible(c("Sam Roe"), c("Pat Roe")), false);
+  assert.equal(namesCompatible(c("Jane Doe"), c("Example Co")), false);
+  // N's given name counts over the display name's first word.
+  assert.equal(namesCompatible(card(["FN:Dr. Kim Lee", "N:Lee;Kim;;Dr.;"]), c("Kim Lee")), true);
+});
+
+test("links say what each pair shares", () => {
+  const a = card(["FN:Sam Roe", "TEL:(555) 222-3333", "EMAIL:roes@example.org"], { id: "a" });
+  const b = card(["FN:Pat Roe", "TEL:+1 555 222 3333"], { id: "b" });
+  const c = card(["FN:Lee Poe"], { id: "c" });
+  assert.deepEqual(groupLinks([a, b, c]).map((l) => [l.a.id, l.b.id, l.shared]), [["a", "b", [{ kind: "phone", value: "(555) 222-3333" }]]]);
+});
+
+test("a household and a shared name chain into one group, and are sorted into people", () => {
+  // One group: Sam (2 cards) and Pat share the house phone; a second Pat Roe card has Pat's email.
+  const sam1 = card(["FN:Sam Roe", "TEL;TYPE=home:555-222-3333", "EMAIL:sam@example.org"], { id: "sam1" });
+  const sam2 = card(["FN:Sammy Roe", "EMAIL:sam@example.org"], { id: "sam2" });
+  const pat1 = card(["FN:Pat Roe", "TEL;TYPE=home:(555) 222-3333"], { id: "pat1" });
+  const pat2 = card(["FN:Pat Roe", "EMAIL:pat@example.org"], { id: "pat2" });
+  const kid = card(["FN:Alex Roe", "TEL:555-222-3333"], { id: "kid" });
+  const groups = findDuplicates([sam1, sam2, pat1, pat2, kid]);
+  assert.equal(groups.length, 1);
+  const assign = suggestPeople(groups[0].cards);
+  assert.equal(assign.sam1, assign.sam2);
+  assert.equal(assign.pat1, assign.pat2);
+  assert.notEqual(assign.sam1, assign.pat1);
+  assert.notEqual(assign.kid, assign.sam1);
+  assert.notEqual(assign.kid, assign.pat1);
+  assert.deepEqual(new Set(Object.values(assign)), new Set([1, 2, 3]));
+  // Kept apart, they never group again.
+  const apart = new Set(apartPairs(assign));
+  assert.equal(apart.size, 8);
+  assert.deepEqual(findDuplicates([sam1, sam2, pat1, pat2, kid], apart).map((g) => g.cards.map((x) => x.id).sort()), [["pat1", "pat2"], ["sam1", "sam2"]]);
+});
+
+test("a one-word name alone isn't enough to call it one person", () => {
+  const a = card(["FN:Mom", "EMAIL:mom@example.org"], { id: "a" });
+  const b = card(["FN:Mom", "TEL:555-111-2222"], { id: "b" });
+  const assign = suggestPeople(findDuplicates([a, b])[0].cards);
+  assert.notEqual(assign.a, assign.b);
+  const c = card(["FN:Jane Doe"], { id: "c" });
+  const d = card(["FN:Jane Doe"], { id: "d" });
+  const both = suggestPeople([c, d]);
+  assert.equal(both.c, both.d);
 });
 
 const keeperLines = [
