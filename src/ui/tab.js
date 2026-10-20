@@ -174,10 +174,8 @@ function trackGenerated(generated, direction) {
 
 /**
  * Applies changes to cards (src/core/history.js), records them for undo,
- * and offers Undo. `extra.generated` is { added, removed } chat addresses;
- * `extra.dismissed` are duplicate pairs to keep apart once every change
- * went through (a sorted group's people). Returns the history entry, or
- * null when nothing was changed.
+ * and offers Undo. `extra.generated` is { added, removed } chat addresses.
+ * Returns the history entry, or null when nothing was changed.
  */
 async function apply(title, changes, extra = {}) {
   if (!changes.length || state.busy) {
@@ -198,10 +196,6 @@ async function apply(title, changes, extra = {}) {
         removed: (extra.generated.removed ?? []).filter(([id]) => done.has(id)),
       };
       trackGenerated(entry.generated, +1);
-    }
-    if (!error && extra.dismissed?.length) {
-      entry.dismissed = extra.dismissed.filter((pair) => !state.dismissed.has(pair));
-      entry.dismissed.forEach((pair) => state.dismissed.add(pair));
     }
     state.history = addEntry(state.history, entry);
     await browser.storage.local.set({ history: state.history, generated: state.generated, dismissed: [...state.dismissed] });
@@ -251,7 +245,7 @@ async function undo(entry) {
     if (entry.generated) {
       trackGenerated(entry.generated, -1);
     }
-    // The people kept apart by this change may group again.
+    // Test builds 0.1.1 and 0.1.2 kept sorted people apart as part of a merge.
     (entry.dismissed ?? []).forEach((pair) => state.dismissed.delete(pair));
     await browser.storage.local.set({ history: state.history, generated: state.generated, dismissed: [...state.dismissed] });
   }

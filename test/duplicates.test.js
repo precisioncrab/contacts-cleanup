@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { card } from "./helpers.js";
-import { findDuplicates, mergeOptions, mergeVCard, nameKey, pairKey, namesCompatible, groupLinks, suggestPeople, apartPairs, personName } from "../src/core/duplicates.js";
+import { findDuplicates, mergeOptions, mergeVCard, nameKey, pairKey, namesCompatible, groupLinks, suggestPeople } from "../src/core/duplicates.js";
 import { parseVCard, getAll, first } from "../src/core/vcard.js";
 import { readCard } from "../src/core/card.js";
 
@@ -94,10 +94,6 @@ test("a household and a shared name chain into one group, and are sorted into pe
   assert.notEqual(assign.kid, assign.sam1);
   assert.notEqual(assign.kid, assign.pat1);
   assert.deepEqual(new Set(Object.values(assign)), new Set([1, 2, 3]));
-  // Kept apart, they never group again.
-  const apart = new Set(apartPairs(assign));
-  assert.equal(apart.size, 8);
-  assert.deepEqual(findDuplicates([sam1, sam2, pat1, pat2, kid], apart).map((g) => g.cards.map((x) => x.id).sort()), [["pat1", "pat2"], ["sam1", "sam2"]]);
 });
 
 test("cards without a name don't glue different people together", () => {
@@ -129,11 +125,6 @@ test("cards without a name don't glue different people together", () => {
   assert.equal(assign.glue2, assign.john1);
   assert.ok([assign.jane1, assign.john1].includes(assign.j));
   assert.equal(new Set(Object.values(assign)).size, 3);
-});
-
-test("a person is called by its fullest real name", () => {
-  assert.equal(personName([card(["FN:Pat Roe"]), card(["FN:Patricia Roe"]), card(["EMAIL:pat@example.org"])]), "Patricia Roe");
-  assert.equal(personName([card(["EMAIL:pat@example.org"])]), "pat@example.org");
 });
 
 test("a one-word name alone isn't enough to call it one person", () => {
@@ -226,6 +217,23 @@ test("unpicked values are dropped, and (none) removes a single field", () => {
   const merged = parseVCard(text);
   assert.deepEqual(getAll(merged, "TEL").map((p) => p.value), ["555-000-1111"]);
   assert.equal(first(merged, "ORG"), undefined);
+});
+
+test("the merged card can be renamed: display, first and last name", () => {
+  const keeper = card(["FN:J Doe", "N:Doe;J;;Dr.;", "EMAIL:jane@example.org"], { id: "k" });
+  const other = card(["FN:Jane Doe", "EMAIL:jane@example.org"], { id: "o" });
+  const multi = { EMAIL: ["jane@example.org"] };
+  const merged = readCard({ id: "k", vCard: mergeVCard([keeper, other], "k", { name: "Janie Doe-Smith", given: "Janie", family: "Doe-Smith", multi, single: {}, note: "" }) });
+  assert.equal(merged.name, "Janie Doe-Smith");
+  assert.deepEqual(merged.nameParts, { family: "Doe-Smith", given: "Janie", additional: "", prefix: "Dr.", suffix: "" });
+  // A card with no N gets one when a first or last name is typed.
+  const bare = card(["FN:Kim", "EMAIL:kim@example.org"], { id: "b" });
+  const bare2 = card(["FN:Kim", "EMAIL:kim@example.org"], { id: "b2" });
+  const named = readCard({ id: "b", vCard: mergeVCard([bare, bare2], "b", { name: "Kim Lee", given: "Kim", family: "Lee", multi: { EMAIL: ["kim@example.org"] }, single: {}, note: "" }) });
+  assert.deepEqual([named.nameParts.given, named.nameParts.family], ["Kim", "Lee"]);
+  // Typed single fields (organization) are written as typed.
+  const org = readCard({ id: "b", vCard: mergeVCard([bare, bare2], "b", { name: "Kim", multi: { EMAIL: ["kim@example.org"] }, single: { ORG: "New Co" }, note: "" }) });
+  assert.equal(org.org, "New Co");
 });
 
 test("the kept card gets a name and N from the others when it has none", () => {

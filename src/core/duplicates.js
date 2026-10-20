@@ -9,11 +9,10 @@
  * phone number (any format), a chat address, or a name (case, accents,
  * punctuation and word order aside). Linked cards form a group, and links
  * chain: a household phone and a shared name can put several people in one
- * group. So a group is sorted into people before merging: suggestPeople()
- * starts from the strong links only (see strongLink()), and the user moves
- * cards between people. Each person's cards merge into one card; cards of
- * different people are marked "not duplicates" so they don't group again.
- * Nothing is merged here: the user picks what each merged card keeps.
+ * group. So the user checks which cards in a group are the same person;
+ * suggestPeople() picks the ones checked at first, from the strong links
+ * only (see strongLink()). Nothing is merged here: the user picks what the
+ * merged card keeps.
  *
  * A merge edits the kept card's vCard line by line (src/core/vcard.js), so
  * whatever it holds that isn't listed for picking (a photo, custom fields)
@@ -265,26 +264,6 @@ export function suggestPeople(cards, dismissed = new Set()) {
   return assign;
 }
 
-/** What to call a person: the fullest real name among its cards, else the first card's label. */
-export function personName(cards) {
-  const names = cards.map(label).filter(isRealName).sort((a, b) => b.length - a.length);
-  return names[0] ?? label(cards[0]);
-}
-
-/** The pairs of cards put in different people (pairKey()s), to keep them from grouping again. */
-export function apartPairs(assign) {
-  const ids = Object.keys(assign);
-  const pairs = [];
-  for (let i = 0; i < ids.length; i++) {
-    for (let j = i + 1; j < ids.length; j++) {
-      if (assign[ids[i]] !== assign[ids[j]]) {
-        pairs.push(pairKey(ids[i], ids[j]));
-      }
-    }
-  }
-  return pairs;
-}
-
 /** Fields with several values; each value is picked on its own. */
 export const MULTI = [
   { name: "TEL", label: "Phone numbers", key: (p) => phoneKey(unescapeText(p.value)) ?? unescapeText(p.value).trim() },
@@ -387,6 +366,8 @@ function categoriesOf(cards) {
  * @param {string} keeperId - the card that stays
  * @param {object} choice
  * @param {string} choice.name - the display name
+ * @param {string} [choice.given] - the first name (N's given name); left as it is when not given
+ * @param {string} [choice.family] - the last name (N's family name); left as it is when not given
  * @param {Object<string, Set<string>|string[]>} choice.multi - field name -> the value keys kept
  * @param {Object<string, string|null>} choice.single - field name -> the value kept ("" or null: none)
  * @param {string} choice.note - the note
@@ -407,6 +388,23 @@ export function mergeVCard(cards, keeperId, choice) {
     const n = others.map((c) => first(c.vcard, "N")).find(Boolean);
     if (n) {
       insertProp(vcard, withoutGroupAndParams(n), "FN");
+    }
+  }
+  if (choice.given !== undefined || choice.family !== undefined) {
+    const n = first(vcard, "N");
+    const parts = n ? splitStructured(n.value) : [];
+    while (parts.length < 5) {
+      parts.push("");
+    }
+    parts[0] = choice.family ?? parts[0];
+    parts[1] = choice.given ?? parts[1];
+    const value = parts.map(escapeText).join(";");
+    if (n) {
+      if (value !== n.value) {
+        setValue(n, value);
+      }
+    } else if (parts[0] || parts[1]) {
+      insertProp(vcard, makeProp("N", value), "FN");
     }
   }
 
