@@ -10,7 +10,7 @@
  */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, avatar, emptyState, matches, virtualList } from "../parts.js";
+import { toolbar, row, avatar, emptyState, matches, tag, virtualList } from "../parts.js";
 import { contactPanel, startNewContact } from "../contact-panel.js";
 import { label } from "../../core/card.js";
 
@@ -99,6 +99,7 @@ export default {
         meta: [
           h("span", {}, card.org || card.emails[0]?.address || card.phones[0]?.value || ""),
           manyBooks ? h("span", {}, card.bookName) : null,
+          card.shadowed ? tag(`same ID as in ${card.shadowed}`, "warn") : null,
         ],
       }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts here yet.", ctx.state.search ? "" : "Check an address book in the sidebar, or add a contact.") }),
     ];

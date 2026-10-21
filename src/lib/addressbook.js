@@ -15,18 +15,36 @@
  * thousands of them, which made everything slow. In Manifest V2 the vCard
  * goes in as { vCard }, a property Thunderbird keeps out, so nothing extra
  * is stored; and an update can clear those leftover properties (repair).
+ *
+ * Contact ids: Thunderbird names a contact by its UID only, and the same
+ * contact can sit in two address books with one UID (a book imported from
+ * another). contacts.get, update and delete then reach only one of the
+ * copies, whichever Thunderbird finds first. So every card here is named
+ * "<address book id>»<UID>", and a write checks that Thunderbird reaches
+ * that very copy; it refuses rather than change the other one.
  */
 
 const contacts = () => browser.contacts ?? browser.addressBooks.contacts;
+const SEP = "»";
+
+/** A card's id here: its address book and its UID. */
+export const cardKey = (parentId, uid) => `${parentId}${SEP}${uid}`;
+
+/** { book, uid } from a card's id (book is null for a plain UID, as in older undo history). */
+export function splitKey(key) {
+  const at = String(key).indexOf(SEP);
+  return at < 0 ? { book: null, uid: String(key) } : { book: key.slice(0, at), uid: key.slice(at + SEP.length) };
+}
 
 /** A property Thunderbird stored from one character of a vCard (the bug above): a name that's only digits. */
 export const isJunkProperty = (name) => /^\d+$/.test(name);
 
-/** A contact node as the rest of the add-on uses it: { id, parentId, readOnly, vCard, junk } (junk: how many leftover properties). */
+/** A contact node as the rest of the add-on uses it: { id, uid, parentId, readOnly, vCard, junk } (junk: how many leftover properties). */
 function contactOf(node) {
   const properties = node.properties ?? {};
   return {
-    id: node.id,
+    id: cardKey(node.parentId, node.id),
+    uid: node.id,
     parentId: node.parentId,
     type: node.type,
     readOnly: Boolean(node.readOnly),
@@ -47,6 +65,28 @@ export async function loadBooks() {
   }));
 }
 
+/** Which address book's copy Thunderbird reaches for this UID (the one add-ons can change), or null. */
+export async function reachableBook(uid) {
+  try {
+    return (await contacts().get(uid))?.parentId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The node Thunderbird reaches for a card id, after checking it's that
+ * address book's copy. Throws when Thunderbird would reach another copy.
+ */
+async function reach(key) {
+  const { book, uid } = splitKey(key);
+  const node = await contacts().get(uid);
+  if (node && book && node.parentId !== book) {
+    throw new Error("This contact is in two address books with the same ID, and Thunderbird only lets add-ons change the copy in the other one. Nothing was changed.");
+  }
+  return { node, uid };
+}
+
 /** A data URL from a File or Blob. */
 function toDataUrl(blob) {
   return new Promise((resolve, reject) => {
@@ -61,51 +101,54 @@ function toDataUrl(blob) {
 const PHOTO_LIMIT = 2 * 1024 * 1024;
 
 export const api = {
-  async get(id) {
+  async get(key) {
     try {
-      const node = await contacts().get(id);
-      return node ? contactOf(node) : null;
+      const { book, uid } = splitKey(key);
+      const node = await contacts().get(uid);
+      return node && (!book || node.parentId === book) ? contactOf(node) : null;
     } catch {
       return null;
     }
   },
-  update(id, vCard) {
-    return contacts().update(id, { vCard });
+  async update(key, vCard) {
+    const { uid } = await reach(key);
+    return contacts().update(uid, { vCard });
   },
-  create(parentId, vCard) {
-    return contacts().create(parentId, null, { vCard });
+  async create(parentId, vCard) {
+    return cardKey(parentId, await contacts().create(parentId, null, { vCard }));
   },
-  remove(id) {
-    return contacts().delete(id);
+  async remove(key) {
+    const { uid } = await reach(key);
+    return contacts().delete(uid);
   },
-  async photo(id) {
-    const file = await contacts().getPhoto(id);
+  async photo(key) {
+    const file = await contacts().getPhoto(splitKey(key).uid);
     return file && file.size <= PHOTO_LIMIT ? toDataUrl(file) : null;
   },
-  async setPhoto(id, dataUrl) {
+  async setPhoto(key, dataUrl) {
     const blob = await (await fetch(dataUrl)).blob();
     const type = blob.type || "image/jpeg";
-    await contacts().setPhoto(id, new File([blob], `photo.${type.split("/")[1] ?? "jpg"}`, { type }));
+    await contacts().setPhoto(splitKey(key).uid, new File([blob], `photo.${type.split("/")[1] ?? "jpg"}`, { type }));
   },
   /**
    * Clears a card's leftover properties (the bug above) and saves it again
    * as it is: its vCard doesn't change. Returns how many were cleared.
    */
-  async repair(id) {
-    const node = await contacts().get(id);
+  async repair(key) {
+    const { node, uid } = await reach(key);
     const properties = node?.properties ?? {};
     const junk = Object.keys(properties).filter(isJunkProperty);
     if (!junk.length) {
       return 0;
     }
-    await contacts().update(id, { vCard: properties.vCard, ...Object.fromEntries(junk.map((name) => [name, null])) });
+    await contacts().update(uid, { vCard: properties.vCard, ...Object.fromEntries(junk.map((name) => [name, null])) });
     return junk.length;
   },
 };
 
 /** A card's photo as an object URL for an <img>, or null when it has none. */
-export async function photoUrl(id) {
-  const file = await contacts().getPhoto(id).catch(() => null);
+export async function photoUrl(key) {
+  const file = await contacts().getPhoto(splitKey(key).uid).catch(() => null);
   return file ? URL.createObjectURL(file) : null;
 }
 

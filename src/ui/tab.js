@@ -18,7 +18,7 @@ import { h, fill, plural } from "./dom.js";
 import { onPhotosLoaded } from "./parts.js";
 import { menuBar } from "./menu.js";
 import { THEMES, applyTheme, getThemePref, initTheme } from "./theme.js";
-import { loadBooks, api, onAddressBookChange } from "../lib/addressbook.js";
+import { loadBooks, api, onAddressBookChange, reachableBook, splitKey } from "../lib/addressbook.js";
 import { omemoClient, omemoTier } from "../lib/omemo.js";
 import { LINKS, openLink } from "../lib/links.js";
 import { readCard, label } from "../core/card.js";
@@ -104,13 +104,62 @@ const ctx = {
 function recompute() {
   const s = state.settings;
   const country = countryById(s.country);
-  derived.duplicates = findDuplicates(state.cards, state.dismissed, { acrossBooks: s.duplicatesAcrossBooks })
+  // A copy Thunderbird doesn't let add-ons change (see markShadowed) is never proposed for a change.
+  const cards = state.cards.filter((c) => !c.shadowed);
+  derived.duplicates = findDuplicates(cards, state.dismissed, { acrossBooks: s.duplicatesAcrossBooks })
     .map((group) => ({ ...group, suggested: suggestPeople(group.cards, state.dismissed) }));
-  derived.phones = state.cards
+  derived.phones = cards
     .map((card) => ({ card, ...phoneFixes(card, { style: s.phoneStyle, country }) }))
     .filter((p) => p.fixes.length || p.skipped.length);
-  derived.names = state.cards.map((card) => ({ card, proposal: proposeName(card) })).filter((n) => n.proposal);
-  derived.prefix = state.cards.map((card) => ({ card, fixes: prefixFixes(card) })).filter((p) => p.fixes.length);
+  derived.names = cards.map((card) => ({ card, proposal: proposeName(card) })).filter((n) => n.proposal);
+  derived.prefix = cards.map((card) => ({ card, fixes: prefixFixes(card) })).filter((p) => p.fixes.length);
+}
+
+/**
+ * The same contact can be in two address books with one UID (a book
+ * imported from another). Thunderbird lets add-ons reach only one of those
+ * copies, so the others are marked `shadowed` with the name of the book
+ * whose copy Thunderbird changes: they're shown, but nothing is proposed
+ * or saved for them (src/lib/addressbook.js refuses such a write too).
+ */
+async function markShadowed() {
+  const byUid = new Map();
+  for (const book of state.books.filter((b) => !b.readOnly && !b.remote)) {
+    for (const contact of book.contacts) {
+      byUid.set(contact.uid, [...(byUid.get(contact.uid) ?? []), contact.parentId]);
+    }
+  }
+  const reachable = new Map();
+  for (const [uid, books] of byUid) {
+    if (books.length > 1) {
+      reachable.set(uid, await reachableBook(uid));
+    }
+  }
+  const bookName = (id) => state.books.find((b) => b.id === id)?.name ?? "another address book";
+  for (const card of state.cards) {
+    const target = reachable.get(card.uid);
+    card.shadowed = target !== undefined && target !== card.parentId ? bookName(target) : null;
+  }
+  state.shadowedCount = state.cards.filter((c) => c.shadowed).length;
+}
+
+/** "Not duplicates" pairs saved by 0.1.16 and older name cards by UID only; they now name each copy. */
+function upgradeDismissed() {
+  const byUid = new Map();
+  for (const card of state.cards) {
+    byUid.set(card.uid, [...(byUid.get(card.uid) ?? []), card.id]);
+  }
+  for (const pair of [...state.dismissed]) {
+    const [a, b] = pair.split("|");
+    if (splitKey(a).book || splitKey(b).book) {
+      continue;
+    }
+    for (const ka of byUid.get(a) ?? []) {
+      for (const kb of byUid.get(b) ?? []) {
+        state.dismissed.add(ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`);
+      }
+    }
+  }
 }
 
 async function reload() {
@@ -127,8 +176,10 @@ async function reload() {
   const excluded = new Set(state.settings.excludedBooks);
   state.cards = state.books
     .filter((book) => !book.readOnly && !book.remote && !excluded.has(book.id))
-    .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => readCard(node, book.name)))
+    .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => ({ ...readCard(node, book.name), uid: node.uid })))
     .sort((a, b) => label(a).localeCompare(label(b)));
+  await markShadowed();
+  upgradeDismissed();
   const ids = new Set(state.cards.map((c) => c.id));
   for (const map of [state.nameEdits, state.nameOn, state.drafts]) {
     for (const id of map.keys()) {

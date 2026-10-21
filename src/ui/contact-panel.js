@@ -157,7 +157,7 @@ export function contactPanel(ctx, card, { before = null } = {}) {
     const button = document.getElementById("cp-save");
     if (button) {
       const dirty = isDirty(ctx, d, card);
-      button.disabled = !dirty || Boolean(ctx.state.busy);
+      button.disabled = !dirty || Boolean(ctx.state.busy) || Boolean(card?.shadowed);
       button.textContent = dirty ? "Save" : "Saved";
     }
   };
@@ -218,6 +218,9 @@ export function contactPanel(ctx, card, { before = null } = {}) {
       ? h("div", { class: "detail-head" }, avatar(card, true), h("div", { class: "who" }, h("div", { class: "name" }, cardLabel(card)), h("div", { class: "book" }, card.bookName)))
       : h("h3", {}, "New contact"),
     before,
+    card?.shadowed
+      ? h("div", { class: "notice warn" }, `This contact is also in ${card.shadowed}, with the same contact ID. Thunderbird only lets add-ons change one of the two copies, the one in ${card.shadowed}, so this copy (in ${card.bookName}) can't be saved or deleted here. Change it in Thunderbird's Address Book, or open the copy in ${card.shadowed}.`)
+      : null,
     card && d.touched && d.base !== card.vCard
       ? h("div", { class: "notice warn" }, "This contact changed in Thunderbird while you were editing it. Saving writes your changes over it. ",
         h("button", { class: "link", onClick: () => {
@@ -349,9 +352,9 @@ export function contactPanel(ctx, card, { before = null } = {}) {
     } }),
 
     h("div", { class: "detail-actions" },
-      h("button", { class: "primary", id: "cp-save", disabled: !dirty || Boolean(ctx.state.busy), onClick: () => save(ctx, card, d) }, dirty ? "Save" : "Saved"),
+      h("button", { class: "primary", id: "cp-save", disabled: !dirty || Boolean(ctx.state.busy) || Boolean(card?.shadowed), onClick: () => save(ctx, card, d) }, dirty ? "Save" : "Saved"),
       card
-        ? h("button", { class: "danger", disabled: Boolean(ctx.state.busy), onClick: () => remove(ctx, card) }, "Delete")
+        ? h("button", { class: "danger", disabled: Boolean(ctx.state.busy) || Boolean(card.shadowed), onClick: () => remove(ctx, card) }, "Delete")
         : h("button", { onClick: () => {
           ctx.state.newContact = null;
           ctx.render();

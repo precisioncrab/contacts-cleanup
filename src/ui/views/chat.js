@@ -201,7 +201,7 @@ function contactsTab(ctx) {
     virtualList("chat-contacts", rows, (r) => row(ctx, {
           key: r.card.id,
           muted: !r.addresses.length && !r.jmp,
-          check: { checked: sel.has(r.card.id), title: "Select", onChange: (value) => {
+          check: { checked: sel.has(r.card.id), disabled: Boolean(r.card.shadowed), title: r.card.shadowed ? `Thunderbird only lets add-ons change the copy in ${r.card.shadowed}` : "Select", onChange: (value) => {
             sel[value ? "add" : "delete"](r.card.id);
             ctx.render();
           } },
@@ -214,6 +214,7 @@ function contactsTab(ctx) {
                 ? [change(r.number, r.jmp, false), tag("no chat address yet", "plain")]
                 : h("span", {}, `${r.number}: no country code, so no JMP.chat address (see Phone numbers)`),
             r.fix ? tag("to fix", "warn") : null,
+            r.card.shadowed ? tag(`can't change: same ID as in ${r.card.shadowed}`, "warn") : null,
             r.inChat ? tag("in chat list") : null,
           ],
         }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts with a phone number or chat address here.", "") }),
@@ -223,7 +224,7 @@ function contactsTab(ctx) {
 
 /** Under the list while contacts are checked: what can be done with them. */
 function selectedBar(ctx, canChatList) {
-  const rows = contactRows(ctx).filter((r) => ctx.state.chat.sel.has(r.card.id));
+  const rows = contactRows(ctx).filter((r) => ctx.state.chat.sel.has(r.card.id) && !r.card.shadowed);
   if (!rows.length) {
     return null;
   }
