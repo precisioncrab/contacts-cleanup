@@ -18,7 +18,7 @@ Contacts Cleanup tidies Thunderbird's address book and gets your contacts ready 
 
 **Missing names.** Cards without a display name get one from the first and last name, the organization, the nickname or the email address, and you can change each before applying.
 
-**Chat address fixes.** Fixes chat addresses other apps saved in a form Thunderbird's card editor refuses (no xmpp: in front, or an old X-JABBER field).
+**Chat addresses.** Adds XMPP chat addresses to your contacts, written the way Thunderbird's own card editor wants them. For phone contacts it makes JMP.chat addresses (+15551234567@cheogram.com), which let an XMPP account registered with JMP.chat text and call those phone numbers: check the people you want, select all phone contacts, or add one for a single person. It also fixes chat addresses other apps saved in a form Thunderbird's card editor refuses.
 
 **Edit card.** Every field of a card in one page, to fill in what's missing.
 

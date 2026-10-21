@@ -18,6 +18,7 @@ import { avatar, tag } from "./parts.js";
 import { label } from "../core/card.js";
 import { comparable } from "../core/vcard.js";
 import { mergeOptions, mergeVCard, MULTI, SINGLE, ADD_TYPES } from "../core/duplicates.js";
+import { jmpAddress, phoneChoices, normalizeGateway, DEFAULT_GATEWAY } from "../core/chat.js";
 
 /** How a value's type reads next to it. */
 export const TYPE_NAMES = { cell: "mobile", mobile: "mobile", iphone: "mobile", home: "home", work: "work", fax: "fax", pager: "pager", main: "main", other: "other" };
@@ -99,14 +100,32 @@ function vCardFor(card, ed) {
   });
 }
 
+/**
+ * The card's numbers that can get a JMP.chat address it doesn't have yet
+ * (among its chat addresses or the ones just added): [{ number, address }].
+ */
+function jmpChoices(ctx, card, values, added) {
+  const gateway = normalizeGateway(ctx.state.settings.gateway) ?? DEFAULT_GATEWAY;
+  const bare = (text) => String(text).trim().toLowerCase().replace(/^xmpp:/, "");
+  const have = new Set([...values.map((v) => bare(v.text)), ...added.map((a) => bare(a.value))]);
+  return phoneChoices(card)
+    .map((choice) => ({ number: choice.value, address: jmpAddress(choice.e164, gateway) }))
+    .filter((choice) => !have.has(choice.address.toLowerCase()));
+}
+
 async function save(ctx, card) {
-  const vCard = vCardFor(card, ctx.state.editor.ed);
+  const ed = ctx.state.editor.ed;
+  const vCard = vCardFor(card, ed);
   if (comparable(vCard) === comparable(card.vCard)) {
     closeEditor(ctx);
     return;
   }
-  const name = ctx.state.editor.ed.name.trim() || label(card);
-  const entry = await ctx.apply(`Edited ${name}`, [{ type: "update", id: card.id, vCard, label: name }]);
+  const name = ed.name.trim() || label(card);
+  // JMP.chat addresses added with their button count as this add-on's, so Chat addresses can take them off again.
+  const added = (ed.added.IMPP ?? []).map((a) => String(a.value).trim().toLowerCase().replace(/^xmpp:/, ""));
+  const jmp = [...(ed.jmp ?? [])].filter((address) => added.includes(address));
+  const entry = await ctx.apply(`Edited ${name}`, [{ type: "update", id: card.id, vCard, label: name }],
+    jmp.length ? { generated: { added: jmp.map((address) => [card.id, address]), removed: [] } } : {});
   if (entry) {
     closeEditor(ctx);
   }
@@ -217,6 +236,13 @@ export function editorPage(ctx) {
               ctx.render();
             } }, "✕"))),
           values.length || added.length ? null : h("div", { class: "hint" }, "None."),
+          f.name === "IMPP"
+            ? jmpChoices(ctx, card, values, added).map((choice) => h("button", { class: "link add-value", style: { marginLeft: "0", marginRight: "14px" }, title: "A JMP.chat address texts and calls this number from an XMPP account registered with JMP.chat.", onClick: () => {
+              ed.added.IMPP = [...added, { value: `xmpp:${choice.address}`, type: "" }];
+              ed.jmp = new Set([...(ed.jmp ?? []), choice.address.toLowerCase()]);
+              ctx.render();
+            } }, `+ JMP.chat address for ${choice.number}`))
+            : null,
           h("button", { class: "link add-value", style: { marginLeft: "0" }, onClick: () => {
             ed.added[f.name] = [...added, { value: f.name === "ADR" ? ["", "", "", "", "", "", ""] : "", type: ADD_TYPES[f.name]?.[0]?.[0] ?? "" }];
             ctx.render();

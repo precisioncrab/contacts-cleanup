@@ -24,22 +24,22 @@ import { LINKS, openLink } from "../lib/links.js";
 import { readCard, label } from "../core/card.js";
 import { findDuplicates, suggestPeople } from "../core/duplicates.js";
 import { phoneFixes, proposeName } from "../core/fixes.js";
-import { prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
+import { chatState, prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
 import { applyChanges, undoEntry, addEntry } from "../core/history.js";
 import duplicates from "./views/duplicates.js";
 import phones from "./views/phones.js";
 import names from "./views/names.js";
-import fixes from "./views/chat-fixes.js";
+import addresses from "./views/chat-addresses.js";
 import chat from "./views/chat.js";
 import changesView from "./views/history.js";
 import about from "./views/about.js";
 import { editorPage, editorDetail } from "./card-editor.js";
 
-const VIEWS = { duplicates, phones, names, fixes, chat, history: changesView, about };
+const VIEWS = { duplicates, phones, names, addresses, chat, history: changesView, about };
 
 // Pages that were renamed or merged, for old links.
-const VIEW_ALIASES = { chatContacts: "chat" };
+const VIEW_ALIASES = { chatContacts: "chat", fixes: "addresses" };
 
 const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null };
 
@@ -60,6 +60,11 @@ const state = {
   phoneOff: new Set(),
   nameEdits: new Map(),
   nameOn: new Map(),
+  // Chat addresses: JMP.chat addresses checked or unchecked but not applied yet, the number picked per card, the tab, the filter.
+  chatStaged: new Map(),
+  chatNumber: new Map(),
+  chatTab: "phones",
+  chatFilter: "all",
   prefixOff: new Set(),
   // The Chat page: the account shown, the "Who is this?" page ({ jid, name, search, book }), cards checked for Add to chat.
   chat: { account: null, pick: null, addSel: new Set(), namedOpen: false },
@@ -69,7 +74,7 @@ const state = {
   omemo: { loading: false, status: null, result: null, error: null, canAdd: false },
 };
 
-const derived = { duplicates: [], phones: [], names: [], prefix: [] };
+const derived = { duplicates: [], phones: [], names: [], chat: [], prefix: [] };
 
 // Changes this tab makes fire address book events; the tab reloads once
 // when it's done instead of after every card.
@@ -104,6 +109,9 @@ function recompute() {
     .map((card) => ({ card, ...phoneFixes(card, { style: s.phoneStyle, country }) }))
     .filter((p) => p.fixes.length || p.skipped.length);
   derived.names = state.cards.map((card) => ({ card, proposal: proposeName(card) })).filter((n) => n.proposal);
+  derived.chat = state.cards
+    .filter((card) => card.phones.length)
+    .map((card) => ({ card, ...chatState(card, state.generated[card.id] ?? []) }));
   derived.prefix = state.cards.map((card) => ({ card, fixes: prefixFixes(card) })).filter((p) => p.fixes.length);
 }
 
@@ -121,7 +129,7 @@ async function reload() {
     .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => readCard(node, book.name)))
     .sort((a, b) => label(a).localeCompare(label(b)));
   const ids = new Set(state.cards.map((c) => c.id));
-  for (const map of [state.nameEdits, state.nameOn]) {
+  for (const map of [state.nameEdits, state.nameOn, state.chatStaged, state.chatNumber]) {
     for (const id of map.keys()) {
       if (!ids.has(id)) {
         map.delete(id);
@@ -351,7 +359,7 @@ function menus() {
     {
       title: "View",
       items: [
-        view("duplicates"), view("phones"), view("names"), view("fixes"), view("chat"),
+        view("duplicates"), view("phones"), view("names"), view("addresses"), view("chat"),
         { separator: true },
         view("history"),
         { separator: true },
@@ -420,7 +428,7 @@ function renderSidebar() {
     h("div", { class: "sidebar-header" }, h("img", { src: "../../icons/icon.svg", alt: "" }), "Contacts Cleanup"),
     h("div", { class: "sidebar-list", "data-scroll": "sidebar" },
       h("div", { class: "sidebar-section-label" }, "Clean up"),
-      item("duplicates"), item("phones"), item("names"), item("fixes"),
+      item("duplicates"), item("phones"), item("names"), item("addresses"),
       h("div", { class: "sidebar-section-label" }, "Chat"),
       item("chat"), omemoItem(),
       h("div", { class: "sidebar-section-label" }, "More"),
