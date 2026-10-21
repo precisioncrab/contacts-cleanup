@@ -4,7 +4,7 @@ _Current state and log, newest on top. The plan is `docs/PLAN.md`; the checks on
 
 ## Current state (2026-10-21)
 
-**Test build 0.1.13** (2026-10-21), laid out like Daynizer's Contacts tab as the maintainer designed it: a sidebar with Contacts, Clean up, Chat, More and Address books, each folding away; **All contacts** with search, New contact, Import vCard and an editor for every field in the right-hand panel (on every page that lists contacts); one **Chat addresses** page (Chat in the sidebar) with a Contacts tab (JMP.chat addresses, Add to chat list, the `xmpp:` fixes) and a Chat list tab; everything free (adding people to the chat list is in OMEMO for Thunderbird 0.1.6 and OMEMO Pro 0.3.4). All the features are built (`dist/contacts-cleanup-0.1.13.xpi`, from `npm run package`):
+**Test build 0.1.14** (2026-10-21; 0.1.13 with the sidebar in Daynizer's order: Contacts, Address books, Labels, Clean up, Chat, More), laid out like Daynizer's Contacts tab as the maintainer designed it: a sidebar with Contacts, Clean up, Chat, More and Address books, each folding away; **All contacts** with search, New contact, Import vCard and an editor for every field in the right-hand panel (on every page that lists contacts); one **Chat addresses** page (Chat in the sidebar) with a Contacts tab (JMP.chat addresses, Add to chat list, the `xmpp:` fixes) and a Chat list tab; everything free (adding people to the chat list is in OMEMO for Thunderbird 0.1.6 and OMEMO Pro 0.3.4). All the features are built (`dist/contacts-cleanup-0.1.14.xpi`, from `npm run package`):
 
 | Area | State |
 |---|---|
@@ -24,7 +24,7 @@ _Current state and log, newest on top. The plan is `docs/PLAN.md`; the checks on
 
 ## Next steps
 
-1. **The maintainer: install 0.1.13 (and OMEMO Pro 0.3.4) and run `docs/MANUAL-TESTS.md`** (rewritten for 0.1.13) with the imported test cards. Then bring the same layout into Daynizer's Contacts tab.
+1. **The maintainer: install 0.1.14 (and OMEMO Pro 0.3.4) and run `docs/MANUAL-TESTS.md`** with the imported test cards. Then bring the same layout into Daynizer's Contacts tab.
 2. OMEMO for Thunderbird: release free 0.1.5 (its listener), then check step 9's free case.
 3. ATN: screenshots, then submit with `docs/LISTING.md`. Check the open question there about linking to an add-on that's installed from file.
 4. Later: Cheogram group texts (`+1...,+1...@cheogram.com`) and chat contacts from cards come from the OMEMO side (Pro).
@@ -32,6 +32,7 @@ _Current state and log, newest on top. The plan is `docs/PLAN.md`; the checks on
 ## Log
 
 ### 2026-10-21
+- **Test build 0.1.14: the sidebar in Daynizer's order.** The maintainer liked 0.1.13 ("it seems to work and I like the way it is set up a lot more"), asked what the items under Contacts were (labels, the vCard CATEGORIES on contacts, not address books; his look like Google Contacts and Android groups), and asked for Daynizer's order: Contacts (All contacts), Address books, Labels (its own category, shown once a contact has a label), Clean up, Chat, More. Daynizer marks synced books with ⇄; Contacts Cleanup can't: Thunderbird 158 gives add-ons only a book's name, readOnly and remote, and remote is false for CardDAV books too (only LDAP lookups are remote; `AddrBookDirectory.isRemote`). The maintainer: leave it blank here; Daynizer (add-on and desktop) keeps its arrows. Clicked through in headless Edge (order with and without labels, label filter, folding Labels); no page errors.
 - **Test build 0.1.13: the maintainer's layout.** The maintainer found the chat pages confusing and laid it out: everything free (Pro only calls); under Chat one item, Chat addresses, with a Contacts tab and a Chat list tab, plus the OMEMO button; a contact editor like Daynizer's with a box for a JMP.chat address and an "add to the chat list" checkbox; select all to make JMP.chat addresses; and the whole add-on like Daynizer's Contacts tab (Contacts, Cleanup, Chat, More, Address books, categories that fold away), so contacts can be managed here too. Asked first (answers: two lists, All contacts and the chat page's Contacts tab; address books as checkboxes only; one item under Chat with the fixes in it). Built:
   - **Sidebar** (`renderSidebar`): the five categories, each folding away (`settings.collapsed`); Contacts lists All contacts and the labels in use; Chat holds Chat addresses and the OMEMO button.
   - **All contacts** (`src/ui/views/contacts.js`): search, + New contact, Import vCard… (a book picked in the question; UIDs left out), label filter.

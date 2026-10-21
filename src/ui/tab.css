@@ -549,4 +549,3 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 .sidebar-toggle { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
 .sidebar-toggle:hover { color: var(--text); }
 .sidebar-toggle .chevron { width: 10px; font-size: 9px; text-align: center; }
-.sidebar-item.sidebar-sub { padding-left: 30px; font-size: 12px; }

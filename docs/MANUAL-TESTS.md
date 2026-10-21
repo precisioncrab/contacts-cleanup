@@ -2,22 +2,22 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; the real address books can stay unchecked in the sidebar until the test cards behave._
 
-## 0.1.13 first run
+## 0.1.14 first run
 
 **Before you start:** Thunderbird must allow unsigned add-ons (Config Editor: `xpinstall.signatures.required` = false), as for OMEMO for Thunderbird. Once the add-on is on addons.thunderbird.net, it's signed and this isn't needed.
 
-1. **Install.** Add-ons and Themes > gear > Install Add-on From File, pick `contacts-cleanup/dist/contacts-cleanup-0.1.13.xpi` (over an older one if you installed it). Thunderbird asks to allow reading and changing your address books. Expect no errors in the Error Console (Ctrl+Shift+J). For the chat list steps, also install OMEMO Pro 0.3.4 over your Pro (`Thunderbird-Chat-OMEMO\thunderbird-omemo-pro\dist\thunderbird-omemo-0.3.4.xpi`).
+1. **Install.** Add-ons and Themes > gear > Install Add-on From File, pick `contacts-cleanup/dist/contacts-cleanup-0.1.14.xpi` (over an older one if you installed it). Thunderbird asks to allow reading and changing your address books. Expect no errors in the Error Console (Ctrl+Shift+J). For the chat list steps, also install OMEMO Pro 0.3.4 over your Pro (`Thunderbird-Chat-OMEMO\thunderbird-omemo-pro\dist\thunderbird-omemo-0.3.4.xpi`).
 2. **Open it.** Its icon in the left sidebar (under Mail, Address Book, Calendar and the others; hover shows "Contacts Cleanup"). It opens as a tab, on All contacts. Also try the toolbar button and Tools > Contacts Cleanup (press Alt to show the menu bar): each brings up the same tab, never a second one. Restart Thunderbird once: the sidebar icon is still there.
 3. **Test address books (imported, nothing to type).** The made-up cards are in `docs/test-cards/`: `Cleanup test.vcf` (17 cards) and `Cleanup test 2.vcf` (1 card). If an older "Cleanup test" book is still there, delete it first. Import each file the same way: Tools > Import (or the ≡ menu > Tools > Import), Import from a file, Import Address Books, "vCard file (.vcf, .vcard)", Continue, pick the file, choose **Create a new directory called "Cleanup test"** (or "Cleanup test 2"; Thunderbird names it after the file), Continue, Start Import, Finish.
 
    What's in "Cleanup test": Test Person and Test P (same email, Test P has a photo and an organization), a card with only the email `first.last@example.org`, Phone Only (a mobile number), the Roe household (Sam, Sammy, Pat, Patricia, Alex), Harry Example (a UK number), Office Example (a number with an extension), a card with first and last name but no display name (Nora Example), one with only an organization (Example Hardware), one with only `jdoe1987@example.org`, Chat Friend (a chat address already), No Prefix (a chat address without `xmpp:`) and Old Jabber (an old X-JABBER line). "Cleanup test 2" holds a second Test Person.
 
    Back in Contacts Cleanup (it updates by itself): in the sidebar under Address books, uncheck every book except "Cleanup test" and "Cleanup test 2".
-4. **The sidebar.** Five categories: Contacts, Clean up, Chat, More, Address books. Click a category's name: it folds away (▸); click again: it's back (▾). Fold Clean up, switch pages and restart Thunderbird: it stays folded.
+4. **The sidebar.** In Daynizer's order: Contacts, Address books, Labels (once a contact has a label), Clean up, Chat, More. Click a category's name: it folds away (▸); click again: it's back (▾). Fold Clean up, switch pages and restart Thunderbird: it stays folded.
 5. **All contacts** (like Daynizer's Contacts tab).
    - **Edit:** select Test Person. The right-hand panel has every field: Address book, Display name, First and Last name, Nickname, Organization, Title, Birthday and Anniversary (with "no year"), Phones and Emails (each with its type), Chat addresses, Addresses, Websites, Labels, Notes. Change the phone number: the button reads Save; click it. The toast says "Edited Test Person"; in Thunderbird's Address Book the number changed and its type didn't. Undo in the toast puts it back.
    - **Edits wait for you:** change something on one contact, select another, come back: your change is still there, not saved. "Undo my edits" drops it.
-   - **New contact:** + New contact. Type a first and last name, + Add phone with a number, then "+ JMP.chat address for (the number)", and the label "Friends". Save: the contact shows in the list (selected), Friends appears under Contacts in the sidebar, and clicking it shows only that contact. Undo from Changes removes it.
+   - **New contact:** + New contact. Type a first and last name, + Add phone with a number, then "+ JMP.chat address for (the number)", and the label "Friends". Save: the contact shows in the list (selected), Friends appears under Labels in the sidebar, and clicking it shows only that contact. Undo from Changes removes it.
    - **Move:** select Phone Only, set Address book to "Cleanup test 2", Save: it's in the other book now ("Moved Phone Only to Cleanup test 2"). Undo moves it back.
    - **Delete:** select a contact, Delete: gone; Undo in the toast brings it back.
    - **Import vCard…:** pick `docs/test-cards/Cleanup test 2.vcf`, choose "Cleanup test" in the question, Import 1: a second Test Person appears in Cleanup test. Undo takes it out again.

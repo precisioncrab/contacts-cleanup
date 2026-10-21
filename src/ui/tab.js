@@ -438,7 +438,7 @@ function renderSidebar() {
     h("span", { class: "name" }, v.title),
     countBadge(count));
   };
-  const labelItem = ([text, count]) => h("div", clickable({ class: `sidebar-item sidebar-sub${state.view === "contacts" && state.contactsFilter === text ? " active" : ""}`, title: `Contacts with the label ${text}` }, () => {
+  const labelItem = ([text, count]) => h("div", clickable({ class: `sidebar-item${state.view === "contacts" && state.contactsFilter === text ? " active" : ""}`, title: `Contacts with the label ${text}` }, () => {
     setView("contacts");
     state.contactsFilter = text;
     render();
@@ -454,13 +454,13 @@ function renderSidebar() {
     collapsed.has(id) ? null : children,
   ];
   const excluded = new Set(state.settings.excludedBooks);
+  const labels = state.loading ? [] : allLabels(state.cards);
+  // Daynizer's order: Contacts, Address books, Labels, then this add-on's Clean up, Chat and More.
+  // Thunderbird doesn't tell add-ons which address books sync (CardDAV books say remote: false too), so no ⇄ here.
   fill(document.getElementById("sidebar"),
     h("div", { class: "sidebar-header" }, h("img", { src: "../../icons/icon.svg", alt: "" }), "Contacts Cleanup"),
     h("div", { class: "sidebar-list", "data-scroll": "sidebar" },
-      category("contacts", "Contacts", [item("contacts"), state.loading ? null : allLabels(state.cards).map(labelItem)]),
-      category("cleanup", "Clean up", [item("duplicates"), item("phones"), item("names")]),
-      category("chat", "Chat", [item("chat"), omemoItem()]),
-      category("more", "More", [item("history"), item("about")]),
+      category("contacts", "Contacts", [item("contacts")]),
       category("books", "Address books", state.books.map((book) => {
         const locked = book.readOnly || book.remote;
         return h("label", { class: `sidebar-book${locked ? " disabled" : ""}`, title: locked ? "Read-only: left alone" : "Include this address book" },
@@ -474,7 +474,11 @@ function renderSidebar() {
           }),
           h("span", { class: "name" }, book.name),
           h("span", { class: "count" }, locked ? "read-only" : String(book.contacts.length)));
-      }))),
+      })),
+      labels.length ? category("labels", "Labels", labels.map(labelItem)) : null,
+      category("cleanup", "Clean up", [item("duplicates"), item("phones"), item("names")]),
+      category("chat", "Chat", [item("chat"), omemoItem()]),
+      category("more", "More", [item("history"), item("about")])),
     h("div", { class: "sidebar-footer" }, "Nothing changes until you apply or save it, and every change can be undone."));
 }
 
