@@ -138,3 +138,27 @@ test("a change of photo is stored whole; a deleted card's photo comes back from 
   assert.ok(!book.nodes.get("a").vCard.includes("PHOTO"));
   assert.ok(book.nodes.get("b").vCard.includes(PHOTO));
 });
+
+test("a created card is recorded with no before; undo deletes it, and asks first if it changed since", async () => {
+  const book = fakeBook([]);
+  const vCard = vcard("FN:Patricia Roe", "TEL;TYPE=cell:+1 555 666 7777");
+  const { entry, error } = await applyChanges(book, "New card: Patricia Roe", [{ type: "create", parentId: "book-1", vCard, label: "Patricia Roe" }]);
+  assert.equal(error, null);
+  assert.equal(entry.cards.length, 1);
+  const [created] = entry.cards;
+  assert.equal(created.before, null);
+  assert.equal(book.nodes.get(created.id).vCard, vCard);
+
+  // Edited since: undo asks, then deletes when told.
+  book.nodes.get(created.id).vCard = vcard("FN:Patricia Roe", "TEL;TYPE=cell:+1 555 666 7777", "NOTE:met at the fair");
+  const asked = await undoEntry(book, entry);
+  assert.equal(asked.done, false);
+  assert.deepEqual(asked.conflicts.map((c) => c.reason), ["changed"]);
+  assert.equal((await undoEntry(book, entry, { force: true })).done, true);
+  assert.equal(book.nodes.has(created.id), false);
+
+  // Deleted since: nothing left to undo, and no question.
+  const again = await applyChanges(book, "New card", [{ type: "create", parentId: "book-1", vCard, label: "Patricia Roe" }]);
+  book.nodes.delete(again.entry.cards[0].id);
+  assert.deepEqual(await undoEntry(book, again.entry), { conflicts: [], done: true, error: null });
+});

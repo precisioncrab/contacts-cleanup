@@ -357,7 +357,7 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 .help dd { margin: 2px 0 0; color: var(--text-2); }
 .no-selection { color: var(--text-faint); padding: 30px 10px; text-align: center; line-height: 1.5; }
 
-/* ---------- Merge and Chat contacts pages (main column, scrolling) ---------- */
+/* ---------- Merge, Edit card and Chat pages (main column, scrolling) ---------- */
 .page { flex: 1; overflow-y: auto; min-height: 0; padding: 8px 16px 32px; user-select: text; }
 .page-section { margin-top: 16px; }
 .page-section > .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-meta); margin-bottom: 6px; font-weight: 600; }
@@ -503,3 +503,14 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 .account-card .modes .choice .what { display: block; color: var(--text-muted); font-size: 11px; margin-top: 1px; line-height: 1.4; }
 .account-card .account-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
 .account-card thead th { color: var(--text-meta); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+
+/* ---------- Chat page ---------- */
+.page .chat-list { margin: 0 -16px; }
+.page .list-heading { padding-left: 0; padding-right: 0; }
+.page .chat-filters { margin: 0 -16px; }
+.chat-details > summary { cursor: pointer; }
+.notice.pitch { display: flex; align-items: center; gap: 12px; }
+.notice.pitch span { flex: 1; min-width: 0; }
+.pick-new { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; max-width: 680px; }
+.page-section .pick-new input[type="text"] { flex: 1; min-width: 200px; width: auto; }
+.page-section .pick-new select { width: auto; }

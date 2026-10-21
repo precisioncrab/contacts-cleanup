@@ -52,7 +52,7 @@ export default {
       h("h3", {}, entry.title),
       h("p", {}, `${when(entry.time)}${entry.undone ? ", undone" : ""}`),
       h("h4", {}, "Cards"),
-      h("ul", { class: "field-list" }, entry.cards.map((card) => h("li", {}, h("span", {}, card.label), card.after === null ? tag("deleted", "warn") : null))),
+      h("ul", { class: "field-list" }, entry.cards.map((card) => h("li", {}, h("span", {}, card.label), card.after === null ? tag("deleted", "warn") : card.before === null ? tag("new card", "plain") : null))),
       entry.undone ? null : h("div", { class: "detail-actions" }, h("button", { disabled: Boolean(ctx.state.busy), onClick: () => ctx.undo(entry) }, "Undo this change")),
     ];
   },

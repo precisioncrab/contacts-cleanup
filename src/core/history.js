@@ -8,7 +8,8 @@
  * Every applied change is one history entry holding each card before and
  * after: { id, time, title, cards: [{ id, parentId, label, before, after,
  * photoKept, photo }], undone }. `after` is the vCard as Thunderbird saved
- * it (read back), or null for a card that was deleted. Photos come inside
+ * it (read back), or null for a card that was deleted; `before` is null for
+ * a card that was created (undo deletes it). Photos come inside
  * the vCards (Thunderbird adds a local card's photo as a data URL), so a
  * change that leaves a card's photo alone stores both vCards without it
  * (`photoKept`), and undo puts the card's current photo back in: a phone
@@ -31,9 +32,10 @@ export const HISTORY_LIMIT = 50;
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
- * Applies changes in order: [{ type: "update", id, vCard, label }] or
- * [{ type: "delete", id, label }]. Stops at the first failure, so a merge
- * never deletes cards after its kept card failed to save.
+ * Applies changes in order: [{ type: "update", id, vCard, label }],
+ * [{ type: "delete", id, label }] or [{ type: "create", parentId, vCard,
+ * label }]. Stops at the first failure, so a merge never deletes cards
+ * after its kept card failed to save.
  * Returns { entry, error }: the entry holds what was done, even after a failure.
  * `onProgress(done, total)` is called after each card.
  */
@@ -41,6 +43,13 @@ export async function applyChanges(api, title, changes, onProgress = () => {}) {
   const entry = { id: newId(), time: Date.now(), title, cards: [], undone: false };
   try {
     for (const [i, change] of changes.entries()) {
+      if (change.type === "create") {
+        const id = await api.create(change.parentId, change.vCard);
+        const saved = (await api.get(id))?.vCard ?? change.vCard;
+        entry.cards.push({ id, parentId: change.parentId, label: change.label, before: null, after: saved });
+        onProgress(i + 1, changes.length);
+        continue;
+      }
       const node = await api.get(change.id);
       if (!node) {
         throw new Error(`"${change.label}" isn't in the address book any more.`);
@@ -75,7 +84,12 @@ export async function undoConflicts(api, entry) {
   const conflicts = [];
   for (const card of entry.cards) {
     const node = await api.get(card.id).catch(() => null);
-    if (card.after === null) {
+    if (card.before === null) {
+      // Created: changed since is a conflict; deleted since is already undone.
+      if (node && comparable(node.vCard) !== comparable(card.after)) {
+        conflicts.push({ label: card.label, reason: "changed" });
+      }
+    } else if (card.after === null) {
       if (node) {
         conflicts.push({ label: card.label, reason: "exists" });
       }
@@ -103,6 +117,12 @@ export async function undoEntry(api, entry, { force = false } = {}) {
   try {
     for (const card of [...entry.cards].reverse()) {
       const node = await api.get(card.id).catch(() => null);
+      if (card.before === null) {
+        if (node) {
+          await api.remove(card.id);
+        }
+        continue;
+      }
       if (card.after === null || !node) {
         if (card.after === null && node) {
           continue;

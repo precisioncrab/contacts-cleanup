@@ -24,21 +24,24 @@ import { LINKS, openLink } from "../lib/links.js";
 import { readCard, label } from "../core/card.js";
 import { findDuplicates, suggestPeople } from "../core/duplicates.js";
 import { phoneFixes, proposeName } from "../core/fixes.js";
-import { chatState, prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
+import { prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
 import { applyChanges, undoEntry, addEntry } from "../core/history.js";
 import duplicates from "./views/duplicates.js";
 import phones from "./views/phones.js";
 import names from "./views/names.js";
+import fixes from "./views/chat-fixes.js";
 import chat from "./views/chat.js";
-import chatContacts from "./views/chat-contacts.js";
 import changesView from "./views/history.js";
 import about from "./views/about.js";
 import { editorPage, editorDetail } from "./card-editor.js";
 
-const VIEWS = { duplicates, phones, names, chat, chatContacts, history: changesView, about };
+const VIEWS = { duplicates, phones, names, fixes, chat, history: changesView, about };
 
-const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false };
+// Pages that were renamed or merged, for old links.
+const VIEW_ALIASES = { chatContacts: "chat" };
+
+const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null };
 
 const state = {
   view: "duplicates",
@@ -57,18 +60,16 @@ const state = {
   phoneOff: new Set(),
   nameEdits: new Map(),
   nameOn: new Map(),
-  chatStaged: new Map(),
-  chatNumber: new Map(),
-  chatTab: "phones",
-  chatFilter: "all",
   prefixOff: new Set(),
+  // The Chat page: the account shown, the "Who is this?" page ({ jid, name, search, book }), cards checked for Add to chat.
+  chat: { account: null, pick: null, addSel: new Set(), namedOpen: false },
   merge: null,
   // Edit card: { id, name, ed } while a card is open in the editor (card-editor.js).
   editor: null,
-  omemo: { loading: false, status: null, result: null, error: null },
+  omemo: { loading: false, status: null, result: null, error: null, canAdd: false },
 };
 
-const derived = { duplicates: [], phones: [], names: [], chat: [], prefix: [] };
+const derived = { duplicates: [], phones: [], names: [], prefix: [] };
 
 // Changes this tab makes fire address book events; the tab reloads once
 // when it's done instead of after every card.
@@ -88,6 +89,8 @@ const ctx = {
   dismiss,
   apply,
   undo,
+  confirm: (options) => confirmDialog(options),
+  toast: (text, options) => toast(text, options),
 };
 
 /* ---------- Data ---------- */
@@ -101,9 +104,6 @@ function recompute() {
     .map((card) => ({ card, ...phoneFixes(card, { style: s.phoneStyle, country }) }))
     .filter((p) => p.fixes.length || p.skipped.length);
   derived.names = state.cards.map((card) => ({ card, proposal: proposeName(card) })).filter((n) => n.proposal);
-  derived.chat = state.cards
-    .filter((card) => card.phones.length)
-    .map((card) => ({ card, ...chatState(card, state.generated[card.id] ?? []) }));
   derived.prefix = state.cards.map((card) => ({ card, fixes: prefixFixes(card) })).filter((p) => p.fixes.length);
 }
 
@@ -121,11 +121,16 @@ async function reload() {
     .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => readCard(node, book.name)))
     .sort((a, b) => label(a).localeCompare(label(b)));
   const ids = new Set(state.cards.map((c) => c.id));
-  for (const map of [state.nameEdits, state.nameOn, state.chatStaged, state.chatNumber]) {
+  for (const map of [state.nameEdits, state.nameOn]) {
     for (const id of map.keys()) {
       if (!ids.has(id)) {
         map.delete(id);
       }
+    }
+  }
+  for (const id of state.chat.addSel) {
+    if (!ids.has(id)) {
+      state.chat.addSel.delete(id);
     }
   }
   if (state.merge && !state.merge.key.split("|").every((id) => ids.has(id))) {
@@ -314,12 +319,14 @@ function confirmDialog({ title, body, ok = "OK", cancel = "Cancel", danger = fal
 /* ---------- Rendering ---------- */
 
 function setView(view) {
+  view = VIEW_ALIASES[view] ?? view;
   if (!VIEWS[view]) {
     return;
   }
   state.view = view;
   state.selected = null;
   state.editor = null;
+  state.chat.pick = null;
   state.merge = view === "duplicates" ? state.merge : null;
   history.replaceState(null, "", `#${view}`);
   render();
@@ -344,7 +351,7 @@ function menus() {
     {
       title: "View",
       items: [
-        view("duplicates"), view("phones"), view("names"), view("chat"), view("chatContacts"),
+        view("duplicates"), view("phones"), view("names"), view("fixes"), view("chat"),
         { separator: true },
         view("history"),
         { separator: true },
@@ -413,9 +420,9 @@ function renderSidebar() {
     h("div", { class: "sidebar-header" }, h("img", { src: "../../icons/icon.svg", alt: "" }), "Contacts Cleanup"),
     h("div", { class: "sidebar-list", "data-scroll": "sidebar" },
       h("div", { class: "sidebar-section-label" }, "Clean up"),
-      item("duplicates"), item("phones"), item("names"),
+      item("duplicates"), item("phones"), item("names"), item("fixes"),
       h("div", { class: "sidebar-section-label" }, "Chat"),
-      item("chat"), item("chatContacts"), omemoItem(),
+      item("chat"), omemoItem(),
       h("div", { class: "sidebar-section-label" }, "More"),
       item("history"), item("about"),
       h("div", { class: "sidebar-section-label" }, "Address books"),
@@ -563,7 +570,8 @@ browser.runtime.onMessage.addListener((message) => {
 });
 
 window.addEventListener("hashchange", () => {
-  const view = location.hash.slice(1);
+  const hash = location.hash.slice(1);
+  const view = VIEW_ALIASES[hash] ?? hash;
   if (VIEWS[view] && view !== state.view) {
     setView(view);
   }
@@ -577,7 +585,8 @@ window.addEventListener("hashchange", () => {
   state.history = stored.history ?? [];
   initTheme(state.settings.theme);
   onPhotosLoaded(render);
-  const view = location.hash.slice(1);
+  const hash = location.hash.slice(1);
+  const view = VIEW_ALIASES[hash] ?? hash;
   if (VIEWS[view]) {
     state.view = view;
   }

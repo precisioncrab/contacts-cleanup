@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * The Chat contacts tab's link to OMEMO for Thunderbird.
+ * The Chat page's link to OMEMO for Thunderbird.
  *
  * Thunderbird has no add-on API for its chat, so chat contacts can only be
  * named by an add-on with an Experiment: OMEMO for Thunderbird, which
@@ -15,6 +15,12 @@
  *   { command: "chatNames.setMode", jid, mode } -> the same, after writing
  *   { command: "openOptions", section }     -> opens its options page
  * `mode` is "off", "local" (Thunderbird only) or "server" (also the XMPP server).
+ * OMEMO Pro for Thunderbird 0.3.3 and later also answers:
+ *   { command: "chatContacts.hello" }       -> { add: true }
+ *   { command: "chatContacts.add", account, contacts: [{ jid, name }] }
+ *                                           -> { added: [jid], failed: [{ jid, error }] }
+ * which puts each contact on the account's contact list on the XMPP server,
+ * with its name, and asks for its presence.
  */
 
 export const OMEMO_ID = "thunderbird-omemo@precisioncrab";
@@ -59,6 +65,15 @@ export function omemoClient(send = (id, message) => browser.runtime.sendMessage(
     preview: () => call({ command: "chatNames.preview" }),
     setMode: (jid, mode) => call({ command: "chatNames.setMode", jid, mode }),
     openOptions: (section = "contacts") => call({ command: "openOptions", section }),
+    /** Whether this OMEMO Pro adds chat contacts (0.3.3 and later); false for anything else. */
+    async canAddContacts() {
+      try {
+        return (await call({ command: "chatContacts.hello" }))?.add === true;
+      } catch {
+        return false;
+      }
+    },
+    addContacts: (account, contacts) => call({ command: "chatContacts.add", account, contacts }),
   };
 }
 

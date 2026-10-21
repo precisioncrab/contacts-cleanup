@@ -27,7 +27,7 @@ export default {
 
         h("div", { class: "page-section" }, h("div", { class: "label" }, "What this add-on can access"),
           h("p", {}, "Your address books, to read cards and to change the ones you apply changes to. Read-only address books are left alone."),
-          h("p", {}, "Nothing else: it makes no network connections and sends nothing anywhere. Its settings and the undo history stay in Thunderbird's own add-on storage. If OMEMO for Thunderbird is installed, the Chat contacts page asks it to name your chat contacts; that's the only other add-on it talks to.")),
+          h("p", {}, "Nothing else: it makes no network connections and sends nothing anywhere. Its settings and the undo history stay in Thunderbird's own add-on storage. If OMEMO for Thunderbird is installed, the Chat page asks it for your chat list and to name your chat contacts; that's the only other add-on it talks to.")),
 
         h("div", { class: "page-section" }, h("div", { class: "label" }, "Related add-ons"),
           h("div", { class: "about-links" },

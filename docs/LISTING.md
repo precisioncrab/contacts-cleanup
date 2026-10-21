@@ -18,9 +18,11 @@ Contacts Cleanup tidies Thunderbird's address book and gets your contacts ready 
 
 **Missing names.** Cards without a display name get one from the first and last name, the organization, the nickname or the email address, and you can change each before applying.
 
-**Chat addresses.** Adds XMPP chat addresses to your contacts, written the way Thunderbird's own card editor wants them. For phone contacts it makes JMP.chat addresses (+15551234567@cheogram.com), which let an XMPP account registered with JMP.chat text and call those phone numbers: check the people you want, select all phone contacts, or generate one for a single person. It also fixes chat addresses other apps saved in a form Thunderbird's card editor refuses.
+**Chat address fixes.** Fixes chat addresses other apps saved in a form Thunderbird's card editor refuses (no xmpp: in front, or an old X-JABBER field).
 
-**Chat contacts and OMEMO.** With OMEMO for Thunderbird installed (free, open source), your XMPP chat contacts in Thunderbird get their names from your address book, and your chats can be end-to-end encrypted with OMEMO, the encryption Conversations, Cheogram and Gajim use. OMEMO for Thunderbird needs access to Thunderbird's chat, which add-ons on this site can't have, so it's installed from its own page: https://precisioncrab.gumroad.com/l/omemo
+**Edit card.** Every field of a card in one page, to fill in what's missing.
+
+**Chat and OMEMO.** With OMEMO for Thunderbird installed (free, open source), your XMPP chat contacts in Thunderbird get their names from your address book. The ones no card has (they show as an address, like +15551234567@cheogram.com) are listed with Add to a card and New card, so they get a name too. Your chats can be end-to-end encrypted with OMEMO, the encryption Conversations, Cheogram and Gajim use. OMEMO for Thunderbird needs access to Thunderbird's chat, which add-ons on this site can't have, so it's installed from its own page: https://precisioncrab.gumroad.com/l/omemo
 
 **Undo.** The Changes page lists everything applied, and Undo puts the cards back, deleted ones included.
 
@@ -38,10 +40,10 @@ Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
 - Support site: https://github.com/precisioncrab/contacts-cleanup/issues
 - Homepage: the precisioncrab.com page for it, once it exists (else the GitHub repo).
 - Source code upload: not needed. Nothing is minified, bundled or generated; the package is the source.
-- Screenshots to take (made-up cards): Duplicates list, the merge page, Phone numbers, Chat addresses with the help panel, one in light and one in dark.
+- Screenshots to take (made-up cards): Duplicates list, the merge page, Phone numbers, the Chat page with the help panel, one in light and one in dark.
 
 ## Notes for the reviewer
-Contacts Cleanup uses only the addressBooks, addressBooks.contacts, menus, spaces and storage APIs. Changes are written with addressBooks.contacts.update and create (vCard text), always after the user clicks Apply; each card's previous vCard is kept in storage.local for undo. The Chat contacts page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
+Contacts Cleanup uses only the addressBooks, addressBooks.contacts, menus, spaces and storage APIs. Changes are written with addressBooks.contacts.update and create (vCard text), always after the user clicks Apply; each card's previous vCard is kept in storage.local for undo. The Chat page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
 
 ## Open (maintainer)
-- The Chat contacts page and this description point to OMEMO for Thunderbird, which is installed from file and needs `xpinstall.signatures.required` turned off. A reviewer could object to sending people toward an unsigned add-on. Our text never mentions turning signatures off; that's on the OMEMO page itself. If a reviewer objects, the fallback is to drop the link from the listing and keep the in-app page.
+- The Chat page and this description point to OMEMO for Thunderbird, which is installed from file and needs `xpinstall.signatures.required` turned off. A reviewer could object to sending people toward an unsigned add-on. Our text never mentions turning signatures off; that's on the OMEMO page itself. If a reviewer objects, the fallback is to drop the link from the listing and keep the in-app page.
