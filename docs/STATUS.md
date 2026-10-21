@@ -4,33 +4,35 @@ _Current state and log, newest on top. The plan is `docs/PLAN.md`; the checks on
 
 ## Current state (2026-10-21)
 
-**Test build 0.1.9** (0.1.8 plus OMEMO Pro's link to its Gumroad page; both OMEMO links now go to Gumroad, both pages live 2026-10-21). 0.1.6 ran in Thunderbird 2026-10-20 (the maintainer: "it is working"); the rest of `docs/MANUAL-TESTS.md` is still open. All five features are built (`dist/contacts-cleanup-0.1.9.xpi`, from `npm run package`):
+**Test build 0.1.10** (2026-10-21, from the maintainer's 0.1.9 run: the OMEMO buttons point to the next add-on, a bar for changes that wait for Apply, a clearer Chat contacts page, and Edit card). 0.1.6 ran in Thunderbird 2026-10-20 and 0.1.9 on 2026-10-21 (with OMEMO Pro 0.3.2, whose Chat contacts answer worked); the rest of `docs/MANUAL-TESTS.md` is still open. All five features are built (`dist/contacts-cleanup-0.1.10.xpi`, from `npm run package`):
 
 | Area | State |
 |---|---|
 | Duplicates and merging (`src/core/duplicates.js`, Duplicates page and the sort-and-merge page) | Built and tested (Node, and clicked through in a browser with a fake address book); 0.1.3: check the cards that are the same person, pick what to keep, rename, Merge; within an address book by default; 0.1.4: Delete per card; 0.1.5: every detail editable while merging; 0.1.6: photos, and which photo the merged card keeps |
 | Phone numbers in one format (`src/core/phone.js`, `fixes.js`) | Built and tested |
-| Missing names (`src/core/fixes.js`) | Built and tested |
+| Missing names (`src/core/fixes.js`) | Built and tested; 0.1.10: Edit card on every row |
+| Edit card: every field of one card (`src/ui/card-editor.js`, saved by `mergeVCard` with one card) | Built and tested (0.1.10); from Missing names and the side panel on Phone numbers and Chat addresses |
 | Chat addresses: JMP.chat per phone contact, select all, one person, prefix fixes (`src/core/chat.js`) | Built and tested |
-| Chat contacts through OMEMO for Thunderbird (`src/lib/omemo.js`) | Built; the OMEMO side (`onMessageExternal`) is in the public OMEMO repo, not in a release yet (free 0.1.5, then Pro) |
+| Chat contacts through OMEMO for Thunderbird (`src/lib/omemo.js`) | Built; worked with OMEMO Pro 0.3.2 (2026-10-21); the free side answers from test build 0.1.5 (not released yet) |
 | Undo for every change (`src/core/history.js`, Changes page) | Built and tested |
 | Light and dark theme, Daynizer's look (`src/ui/`) | Built; both themes checked in screenshots |
 | ATN listing text (`docs/LISTING.md`) | Drafted |
 
-**Tests:** `npm test` gives 76 passing (Node 22+). The UI was also driven in headless Edge against a fake Thunderbird API (merge, undo, phone fixes, names, JMP.chat address, OMEMO messages, theme switch): no page errors. That harness isn't in the repo.
+**Tests:** `npm test` gives 78 passing (Node 22+). The UI was also driven in headless Edge against a fake Thunderbird API (merge, undo, phone fixes, names, JMP.chat address, OMEMO messages with each add-on installed or none, Edit card, theme switch): no page errors. That harness isn't in the repo.
 
 **Checked against Thunderbird 158's own API schemas (2026-10-20):** `addressBooks.contacts` with `update(id, vCard)` and `create(parentId, vCard)` taking vCard text in MV3, `ContactNode.vCard`, `action`, the `tools_menu` menu context, `windows.openDefaultBrowser`.
 
 ## Next steps
 
-1. **The maintainer: run `docs/MANUAL-TESTS.md`** in Thunderbird (a throwaway address book first).
-2. OMEMO for Thunderbird: release the `onMessageExternal` listener (free 0.1.5, then merged into Pro), then test the Chat contacts page with it.
+1. **The maintainer: install 0.1.10 and run what's left of `docs/MANUAL-TESTS.md`** (5, 6, 6b Edit card, 7, 9 and 9b) with the imported test cards.
+2. OMEMO for Thunderbird: release free 0.1.5 (its listener), then check step 9's free case.
 3. ATN: screenshots, then submit with `docs/LISTING.md`. Check the open question there about linking to an add-on that's installed from file.
 4. Later: Cheogram group texts (`+1...,+1...@cheogram.com`) and chat contacts from cards come from the OMEMO side (Pro).
 
 ## Log
 
 ### 2026-10-21
+- **Test build 0.1.10, from the maintainer's 0.1.9 run.** (1) *The OMEMO buttons point to the next add-on* (asked for): with neither OMEMO add-on answering, Get OMEMO for Thunderbird; with the free one, Get OMEMO Pro (the Chat addresses bar, the sidebar item under Chat, the Chat contacts side panel and Help); with Pro, OMEMO settings and no prompts. `omemoTier()` reads `pro` from OMEMO's `hello`. (2) *"Will be added" stayed after adding JMP.chat addresses*: the maintainer's test book showed only Patricia Roe's address saved (read from the profile's address book file), so the other rows were checked but never applied; Apply sat only at the top right. Now a bar under the list says what isn't saved yet with Apply and Clear, the tag reads "not saved yet: Apply adds it", and Phone numbers and Missing names have the same bar. (3) *"Not sure what to do" on Chat contacts*: the page now says what it does and that nothing else is needed once it's on; each account has three radio choices with a line on what each does; Name it now when a contact still waits for its name; the contact list is open (20 or fewer) with headings; a link to Chat addresses for contacts not in the address book. It asks OMEMO again each time it's shown and 4 seconds after a card changes (OMEMO names 3 seconds after), since the "1 contact still needs its name" the maintainer saw was most likely an old answer. (4) *Missing names should open the whole card* (asked for): Edit card, a page with every field (name, first and last name, organization, job title, nickname, birthday and anniversary as date pickers, phone numbers, emails, chat addresses, addresses, websites, note), each editable, ✕ and Restore, + Add with a type; Save is one change with undo; fields it doesn't show stay. From each Missing names row (the Name box starts with the proposed name) and the side panel on Phone numbers and Chat addresses. Also: a chat address typed without `xmpp:` gets it (merge and Edit card), the merge page's new email box no longer says "Email addresse", and the Phone numbers panel no longer says other countries get a simple grouping (they keep yours). 2 new tests (78).
 - **Test cards to import** (the maintainer didn't want to type the made-up cards in): `docs/test-cards/Cleanup test.vcf` (17 cards) and `Cleanup test 2.vcf` (1), imported with Tools > Import > Import from a file > Import Address Books > vCard, which makes a new address book named after the file (read in Thunderbird 158's `aboutImport.js`). Besides the cards the steps already used, they hold Test P's photo (a data URI, which Thunderbird 158 shows, `AddrBookCard.photoURL`), a UK number, a number with an extension, a card with N but no FN, one with only an organization, a one-word email, a chat address from elsewhere, one without `xmpp:` and an X-JABBER line. Run through the add-on's own code first: every card gives what `docs/MANUAL-TESTS.md` now expects (the household sorts as Pat+Patricia, Sam+Sammy, Alex). Steps 3 to 7 and 9 updated to match. The folder isn't in the `.xpi`.
 - **Test build 0.1.9: OMEMO Pro's link goes to its Gumroad page** (https://precisioncrab.gumroad.com/l/omemo-pro) instead of the GitHub README, now that both OMEMO listings are published (both pages answered 200 on 2026-10-21): "Learn about OMEMO Pro" on the Chat contacts page and OMEMO Pro on the About page (`src/lib/links.js`). The README links to it too. The manual tests no longer expect a 404 from the OMEMO for Thunderbird page.
 

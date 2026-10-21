@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { omemoClient, OMEMO_ID, namesSummary, namesRow } from "../src/lib/omemo.js";
+import { omemoClient, omemoTier, OMEMO_ID, namesSummary, namesRow } from "../src/lib/omemo.js";
 
 test("messages go to OMEMO for Thunderbird's id", async () => {
   const sent = [];
@@ -40,4 +40,11 @@ test("summaries use OMEMO's own wording", () => {
   assert.equal(namesRow(account.contacts[0], "off"), "Would get Jane Doe");
   assert.equal(namesRow({ status: "kept", current: "JD" }, "local"), "Keeps JD");
   assert.equal(namesSummary({ mode: "off", contacts: [] }), "No chat contacts on this account.");
+});
+
+test("each OMEMO add-on points to the next: nothing to free, free to Pro", () => {
+  assert.equal(omemoTier(null), "none");
+  assert.equal(omemoTier({ installed: false }), "none");
+  assert.equal(omemoTier({ installed: true, info: { name: "OMEMO for Thunderbird", version: "0.1.5", pro: false, protocol: 1 } }), "free");
+  assert.equal(omemoTier({ installed: true, info: { name: "OMEMO Pro for Thunderbird", version: "0.3.2", pro: true, protocol: 1 } }), "pro");
 });

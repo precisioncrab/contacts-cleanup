@@ -282,7 +282,11 @@ export function adrParts(value) {
   return parts.slice(0, 7);
 }
 
-/** A value as typed, written for its field: an address from its parts; URIs (websites, chat addresses) as they are. */
+/**
+ * A value as typed, written for its field: an address from its parts; URIs
+ * (websites, chat addresses) as they are, except that a chat address typed
+ * without "xmpp:" gets it (Thunderbird's card editor refuses one without).
+ */
 function encodeValue(name, value) {
   if (name === "ADR") {
     const parts = [...value];
@@ -291,7 +295,11 @@ function encodeValue(name, value) {
     }
     return parts.slice(0, 7).map((p) => escapeText(String(p).trim())).join(";");
   }
-  return name === "URL" || name === "IMPP" ? String(value).trim() : escapeText(String(value).trim());
+  const text = String(value).trim();
+  if (name === "IMPP") {
+    return /^[a-z][a-z0-9+.-]*:/i.test(text) || !text.includes("@") ? text : `xmpp:${text}`;
+  }
+  return name === "URL" ? text : escapeText(text);
 }
 
 /** Whether a typed value is empty (an address with no parts). */

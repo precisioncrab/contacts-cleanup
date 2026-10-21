@@ -11,7 +11,7 @@
 
 import { h, plural } from "../dom.js";
 import { toolbar, help } from "../parts.js";
-import { MODES, namesSummary, namesRow, STATUS_ORDER } from "../../lib/omemo.js";
+import { MODES, namesSummary, namesRow, STATUS_ORDER, omemoTier } from "../../lib/omemo.js";
 import { LINKS, openLink } from "../../lib/links.js";
 
 export const CHAT_CONTACTS_HELP = [
@@ -21,6 +21,8 @@ export const CHAT_CONTACTS_HELP = [
   ["Which card names a chat contact", "A JMP.chat or Quicksy address (a phone number) matches the cards' phone numbers in any format; other addresses match the cards' chat addresses, then their email addresses. Cards with different names for one contact give no name. A name a chat contact already has is kept."],
   ["Removing a chat contact", "In Thunderbird's chat list, it only leaves Thunderbird. On the server, it leaves your account's contact list for every chat app. The card and its chat address stay."],
 ];
+
+let refreshTimer = null;
 
 async function refresh(ctx) {
   const omemo = ctx.state.omemo;
@@ -66,11 +68,16 @@ function notInstalled(ctx) {
   ];
 }
 
+/** Contacts that would get a name (or a new one) and haven't yet. */
+const pendingOf = (account) => account.contacts.filter((c) => (c.status === "set" || c.status === "update") && !c.done).length;
+
 function accounts(ctx) {
   const { result, status } = ctx.state.omemo;
   const info = status.info ?? {};
+  const product = info.name ?? "OMEMO for Thunderbird";
   const out = [
-    h("p", {}, `${info.name ?? "OMEMO for Thunderbird"}${info.version ? ` ${info.version}` : ""} is installed. Pick, per account, where chat contacts get their names from this address book. Off shows what would happen without changing anything.`),
+    h("p", {}, `${product}${info.version ? ` ${info.version}` : ""} is installed. Thunderbird's chat list (Chat > Contacts) shows a contact's address, like +15551234567@cheogram.com, until the contact has a name. ${product} can give each chat contact the name from its card in your address book.`),
+    h("p", {}, "Choose, for each chat account, whether it should. Nothing else is needed: once it's on, new and changed cards name their chat contacts by themselves."),
   ];
   if (!result) {
     return out;
@@ -84,23 +91,36 @@ function accounts(ctx) {
   }
   for (const account of result.accounts) {
     const sorted = [...account.contacts].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || a.jid.localeCompare(b.jid));
+    const pending = pendingOf(account);
     out.push(h("div", { class: "account-card" },
-      h("div", { class: "row-line" },
-        h("span", { class: "jid" }, account.jid),
-        h("label", { class: "choice" }, "Names",
-          h("select", {
+      h("div", { class: "row-line" }, h("span", { class: "jid" }, account.jid)),
+      h("div", { class: "modes", role: "radiogroup", "aria-label": `Names for ${account.jid}` },
+        MODES.map(([value, text, what]) => h("label", { class: "choice" },
+          h("input", {
+            type: "radio",
+            name: `mode-${account.jid}`,
+            checked: account.mode === value,
             disabled: ctx.state.omemo.loading,
-            onChange: (e) => setMode(ctx, account.jid, e.target.value),
-          }, MODES.map(([value, text]) => h("option", { value, selected: account.mode === value }, text))))),
+            onChange: () => setMode(ctx, account.jid, value),
+          }),
+          h("span", {}, h("strong", {}, text), h("span", { class: "what" }, what))))),
       h("p", { class: "summary" }, namesSummary(account)),
+      pending && account.mode !== "off"
+        ? h("div", { class: "account-actions" },
+          h("button", { class: "primary", disabled: ctx.state.omemo.loading, onClick: () => setMode(ctx, account.jid, account.mode) },
+            pending === 1 ? "Name it now" : `Name all ${pending} now`))
+        : null,
       account.contacts.length
-        ? h("details", {},
+        ? h("details", { open: account.contacts.length <= 20 },
           h("summary", {}, `All ${plural(account.contacts.length, "chat contact", "chat contacts")}`),
-          h("table", {}, sorted.map((contact) => h("tr", {}, h("th", {}, contact.jid), h("td", {}, namesRow(contact, account.mode))))))
+          h("table", {},
+            h("thead", {}, h("tr", {}, h("th", {}, "Chat contact"), h("th", {}, "Name"))),
+            h("tbody", {}, sorted.map((contact) => h("tr", {}, h("th", {}, contact.jid), h("td", {}, namesRow(contact, account.mode)))))))
         : null));
   }
   out.push(h("div", { class: "notice" },
-    "Chat contacts that aren't in the address book can't get a name. Phone numbers in one format, missing names and chat addresses on cards (the other pages here) help more of them match."));
+    "A chat contact gets a name from the card that has its chat address, or for a JMP.chat address (a phone number), the card with that phone number. To name one that isn't in the address book, add its chat address or number to the person's card.",
+    h("div", { class: "detail-actions", style: { maxWidth: "260px" } }, h("button", { onClick: () => ctx.setView("chat") }, "Go to Chat addresses"))));
   return out;
 }
 
@@ -111,12 +131,23 @@ export default {
 
   count: () => null,
 
+  // Asks afresh each time the page is shown, so it never shows an old answer.
   onShow(ctx) {
-    // The tab asks whether OMEMO for Thunderbird is there when it opens;
-    // this page also needs its accounts, so it asks unless it has them.
-    const omemo = ctx.state.omemo;
-    if (!omemo.loading && (!omemo.status || (omemo.status.installed && !omemo.result))) {
+    if (!ctx.state.omemo.loading) {
       refresh(ctx);
+    }
+  },
+
+  // OMEMO for Thunderbird names chat contacts 3 seconds after a card
+  // changes; this page asks again once that's done.
+  onCardsChanged(ctx) {
+    clearTimeout(refreshTimer);
+    if (ctx.state.omemo.status?.installed) {
+      refreshTimer = setTimeout(() => {
+        if (ctx.state.view === "chatContacts" && !ctx.state.omemo.loading) {
+          refresh(ctx);
+        }
+      }, 4000);
     }
   },
 
@@ -146,14 +177,19 @@ export default {
     ];
   },
 
-  detail() {
+  detail(ctx) {
     return [
       h("h3", {}, "Chat contacts"),
       h("p", {}, "Contacts Cleanup works on the address book. Thunderbird's chat list is reached only by OMEMO for Thunderbird, so this page asks it to do the naming, with the same results as its own options page."),
       help("What these mean", CHAT_CONTACTS_HELP),
-      h("h4", {}, "OMEMO Pro for Thunderbird"),
-      h("p", {}, "Audio calls with JMP.chat, Cheogram and other XMPP apps, in a call window in Thunderbird."),
-      h("div", { class: "detail-actions" }, h("button", { onClick: () => openLink(LINKS.omemoPro) }, "Learn about OMEMO Pro")),
+      // With the free add-on, the next step is Pro; with nothing, the page itself points to the free one.
+      omemoTier(ctx.state.omemo.status) === "free"
+        ? [
+          h("h4", {}, "OMEMO Pro for Thunderbird"),
+          h("p", {}, "Audio calls with JMP.chat phone numbers, Cheogram and other XMPP apps, in a call window in Thunderbird. $10, one time."),
+          h("div", { class: "detail-actions" }, h("button", { onClick: () => openLink(LINKS.omemoPro) }, "Get OMEMO Pro")),
+        ]
+        : null,
     ];
   },
 };

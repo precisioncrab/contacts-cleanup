@@ -5,8 +5,9 @@
 /** Missing names: a display name for cards that have none, editable before applying. */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, cardSummary, emptyState, selectAll, matches } from "../parts.js";
+import { toolbar, row, cardSummary, emptyState, selectAll, matches, pendingBar } from "../parts.js";
 import { applyName } from "../../core/fixes.js";
+import { openEditor } from "../card-editor.js";
 
 const SOURCES = {
   name: "from the first and last name",
@@ -45,7 +46,7 @@ export default {
         primary: { label: on.length ? `Apply ${plural(on.length, "change", "changes")}` : "Apply", disabled: !on.length, onClick: () => applyChecked(ctx) },
       }),
       h("div", { class: "toolbar-filters" },
-        h("span", {}, "Click a name to change it. Guesses from one-word email addresses start unchecked."),
+        h("span", {}, "Click a name to change it, or Edit card to see and fill in everything on the card. Guesses from one-word email addresses start unchecked."),
         h("span", { class: "right" }, selectAll("Select all", list.map((n) => isOn(ctx, n)), (checked) => {
           for (const n of list) {
             ctx.state.nameOn.set(n.card.id, checked);
@@ -87,7 +88,15 @@ export default {
               n.card.name ? h("span", {}, `now shows ${n.card.name}`) : null,
               h("span", {}, n.card.bookName),
             ],
+            actions: [h("button", { class: "small", onClick: () => openEditor(ctx, n.card.id, { name: nameOf(ctx, n).trim() || null }) }, "Edit card")],
           }))),
+      on.length
+        ? pendingBar(ctx, {
+          text: `${plural(on.length, "name is", "names are")} checked. Nothing is saved until you click Apply.`,
+          applyLabel: `Apply ${plural(on.length, "change", "changes")}`,
+          onApply: () => applyChecked(ctx),
+        })
+        : null,
     ];
   },
 
@@ -99,8 +108,12 @@ export default {
       h("p", {}, "Names are taken from the card's first and last name, then its organization or nickname, and only then guessed from the email address."),
     ];
     if (!n) {
-      return [h("h3", {}, "Missing names"), h("p", {}, "Check the names you want, change any that aren't right, then Apply."), about];
+      return [h("h3", {}, "Missing names"), h("p", {}, "Check the names you want, change any that aren't right, then Apply. To see everything on a card, or fill in more than the name, click Edit card."), about];
     }
-    return [cardSummary(n.card), h("p", {}, `Proposed name: ${nameOf(ctx, n)} (${SOURCES[n.proposal.source]}).`), about];
+    return [
+      cardSummary(n.card, () => openEditor(ctx, n.card.id, { name: nameOf(ctx, n).trim() || null })),
+      h("p", {}, `Proposed name: ${nameOf(ctx, n)} (${SOURCES[n.proposal.source]}).`),
+      about,
+    ];
   },
 };

@@ -19,11 +19,24 @@
 
 export const OMEMO_ID = "thunderbird-omemo@precisioncrab";
 
+/** An account's choices: [value, label, what it does]. */
 export const MODES = [
-  ["off", "Off"],
-  ["local", "In Thunderbird only"],
-  ["server", "In Thunderbird and on the server"],
+  ["off", "Off", "Changes nothing. The list below shows what would happen."],
+  ["local", "In Thunderbird only", "Names show in Thunderbird's chat list. Your XMPP server and your other chat apps don't get them."],
+  ["server", "In Thunderbird and on the server", "Names are saved in your account's contact list on your XMPP server, so your other chat apps (Cheogram, Conversations) show them too."],
 ];
+
+/**
+ * What's installed, from status(): "none" (nothing answers), "free"
+ * (OMEMO for Thunderbird) or "pro" (OMEMO Pro for Thunderbird). Each one
+ * points to the next: nothing to the free add-on, free to Pro.
+ */
+export function omemoTier(status) {
+  if (!status?.installed) {
+    return "none";
+  }
+  return status.info?.pro ? "pro" : "free";
+}
 
 /** Sends one command to OMEMO for Thunderbird. `send` is runtime.sendMessage (a fake in tests). */
 export function omemoClient(send = (id, message) => browser.runtime.sendMessage(id, message)) {

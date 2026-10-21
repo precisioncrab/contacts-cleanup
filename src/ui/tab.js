@@ -19,7 +19,7 @@ import { onPhotosLoaded } from "./parts.js";
 import { menuBar } from "./menu.js";
 import { THEMES, applyTheme, getThemePref, initTheme } from "./theme.js";
 import { loadBooks, api, onAddressBookChange } from "../lib/addressbook.js";
-import { omemoClient } from "../lib/omemo.js";
+import { omemoClient, omemoTier } from "../lib/omemo.js";
 import { LINKS, openLink } from "../lib/links.js";
 import { readCard, label } from "../core/card.js";
 import { findDuplicates, suggestPeople } from "../core/duplicates.js";
@@ -34,6 +34,7 @@ import chat from "./views/chat.js";
 import chatContacts from "./views/chat-contacts.js";
 import changesView from "./views/history.js";
 import about from "./views/about.js";
+import { editorPage, editorDetail } from "./card-editor.js";
 
 const VIEWS = { duplicates, phones, names, chat, chatContacts, history: changesView, about };
 
@@ -62,6 +63,8 @@ const state = {
   chatFilter: "all",
   prefixOff: new Set(),
   merge: null,
+  // Edit card: { id, name, ed } while a card is open in the editor (card-editor.js).
+  editor: null,
   omemo: { loading: false, status: null, result: null, error: null },
 };
 
@@ -316,6 +319,7 @@ function setView(view) {
   }
   state.view = view;
   state.selected = null;
+  state.editor = null;
   state.merge = view === "duplicates" ? state.merge : null;
   history.replaceState(null, "", `#${view}`);
   render();
@@ -353,11 +357,23 @@ function menus() {
         view("about"),
         { label: "Report a problem", onClick: () => openLink(LINKS.issues) },
         { separator: true },
-        { label: "OMEMO for Thunderbird", onClick: () => openLink(LINKS.omemo) },
+        omemoMenuItem(),
         { label: "Daynizer", onClick: () => openLink(LINKS.daynizer) },
       ],
     },
   ];
+}
+
+/** Help's OMEMO item: the next add-on to get, or its settings once Pro is there. */
+function omemoMenuItem() {
+  switch (omemoTier(state.omemo.status)) {
+    case "free":
+      return { label: "OMEMO Pro for Thunderbird", onClick: () => openLink(LINKS.omemoPro) };
+    case "pro":
+      return { label: "OMEMO settings", onClick: () => ctx.omemo.openOptions("settings").catch(() => {}) };
+    default:
+      return { label: "OMEMO for Thunderbird", onClick: () => openLink(LINKS.omemo) };
+  }
 }
 
 function chooseTheme(theme) {
@@ -421,17 +437,22 @@ function renderSidebar() {
 }
 
 /**
- * Under Chat: "Get OMEMO for Thunderbird" (its page, in the web browser),
- * or "OMEMO settings" once OMEMO for Thunderbird answers this add-on.
+ * Under Chat, the next OMEMO add-on to get (its page, in the web browser):
+ * OMEMO for Thunderbird when neither answers, OMEMO Pro for Thunderbird
+ * when the free one does; "OMEMO settings" once Pro does.
  */
 function omemoItem() {
-  const installed = Boolean(state.omemo.status?.installed);
-  const go = () => (installed ? ctx.omemo.openOptions("settings").catch(() => {}) : openLink(LINKS.omemo));
+  const item = {
+    none: { text: "Get OMEMO for Thunderbird", icon: "\u2197", title: "End-to-end encrypted XMPP chat in Thunderbird. Opens its page in your web browser.", go: () => openLink(LINKS.omemo) },
+    free: { text: "Get OMEMO Pro", icon: "\u2197", title: "Audio calls in Thunderbird with JMP.chat, Cheogram and other XMPP apps. Opens its page in your web browser.", go: () => openLink(LINKS.omemoPro) },
+    pro: { text: "OMEMO settings", icon: "\u2699", title: "Open OMEMO Pro for Thunderbird's settings", go: () => ctx.omemo.openOptions("settings").catch(() => {}) },
+  }[omemoTier(state.omemo.status)];
+  const go = item.go;
   return h("div", {
     class: "sidebar-item sidebar-link",
     role: "button",
     tabindex: "0",
-    title: installed ? "Open OMEMO for Thunderbird's settings" : "End-to-end encrypted XMPP chat in Thunderbird. Opens its page in your web browser.",
+    title: item.title,
     onClick: go,
     onKeydown: (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -440,8 +461,8 @@ function omemoItem() {
       }
     },
   },
-  h("span", { class: "sidebar-icon", "aria-hidden": "true" }, installed ? "\u2699" : "\u2197"),
-  h("span", { class: "name" }, installed ? "OMEMO settings" : "Get OMEMO for Thunderbird"));
+  h("span", { class: "sidebar-icon", "aria-hidden": "true" }, item.icon),
+  h("span", { class: "name" }, item.text));
 }
 
 function renderProgress() {
@@ -459,6 +480,8 @@ function renderMain() {
     body = h("div", { class: "empty-state" }, "Reading the address books…");
   } else if (state.loadError) {
     body = h("div", { class: "empty-state" }, h("div", { class: "big" }, "Couldn't read the address books."), state.loadError);
+  } else if (state.editor) {
+    body = editorPage(ctx);
   } else {
     body = view.main(ctx);
   }
@@ -472,7 +495,7 @@ function renderMain() {
 
 function renderRail() {
   const view = VIEWS[state.view];
-  fill(document.getElementById("rail"), h("div", { class: "detail-panel", "data-scroll": "detail" }, state.loading ? null : view.detail(ctx)));
+  fill(document.getElementById("rail"), h("div", { class: "detail-panel", "data-scroll": "detail" }, state.loading ? null : state.editor ? editorDetail(ctx) : view.detail(ctx)));
 }
 
 /** Renders everything, keeping focus, text selection and scroll positions. */
@@ -559,10 +582,11 @@ window.addEventListener("hashchange", () => {
     state.view = view;
   }
   render();
-  onAddressBookChange(() => {
+  onAddressBookChange(async () => {
     if (!applying) {
-      reload();
+      await reload();
     }
+    VIEWS[state.view].onCardsChanged?.(ctx);
   });
   await reload();
   VIEWS[state.view].onShow?.(ctx);

@@ -10,7 +10,9 @@
  */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, cardSummary, emptyState, selectAll, matches, help, tag, change } from "../parts.js";
+import { toolbar, row, cardSummary, emptyState, selectAll, matches, help, tag, change, pendingBar } from "../parts.js";
+import { openEditor } from "../card-editor.js";
+import { omemoTier } from "../../lib/omemo.js";
 import { label } from "../../core/card.js";
 import { jmpAddress, addChatAddress, removeChatAddress, applyPrefixFixes, normalizeGateway, DEFAULT_GATEWAY } from "../../core/chat.js";
 import { LINKS, openLink } from "../../lib/links.js";
@@ -104,11 +106,11 @@ function phoneMeta(ctx, item) {
       return [
         change(written, jmpAddress(e164, gateway), false),
         item.choices.length > 1 ? tag(`${item.choices.length} numbers`, "plain") : null,
-        staged === "add" ? tag("will be added") : null,
+        staged === "add" ? tag("not saved yet: Apply adds it", "warn") : null,
       ];
     }
     case "ours":
-      return [h("span", {}, item.ours.join(", ")), tag("added by Contacts Cleanup", "plain"), staged === "remove" ? tag("will be removed", "warn") : null];
+      return [h("span", {}, item.ours.join(", ")), tag("added by Contacts Cleanup", "plain"), staged === "remove" ? tag("not saved yet: Apply removes it", "warn") : null];
     case "theirs":
       return [h("span", {}, `Has ${item.addresses.join(", ")}`)];
     default:
@@ -116,15 +118,27 @@ function phoneMeta(ctx, item) {
   }
 }
 
-/** Until OMEMO for Thunderbird answers: what it adds, and where to get it. */
+/**
+ * The next OMEMO add-on: with neither installed, OMEMO for Thunderbird
+ * (free); with the free one, OMEMO Pro for Thunderbird (calls); with Pro,
+ * nothing.
+ */
 function omemoBanner(ctx) {
-  const status = ctx.state.omemo.status;
-  if (!status || status.installed) {
+  if (!ctx.state.omemo.status) {
     return null;
   }
-  return h("div", { class: "omemo-banner" },
-    h("span", {}, "Chat addresses get your contacts ready for XMPP chat. To see their names in Thunderbird's chat and chat with them end-to-end encrypted, add OMEMO for Thunderbird (free)."),
-    h("button", { class: "primary small", onClick: () => openLink(LINKS.omemo) }, "Get OMEMO for Thunderbird"));
+  switch (omemoTier(ctx.state.omemo.status)) {
+    case "none":
+      return h("div", { class: "omemo-banner" },
+        h("span", {}, "Chat addresses get your contacts ready for XMPP chat. To see their names in Thunderbird's chat and chat with them end-to-end encrypted, add OMEMO for Thunderbird (free)."),
+        h("button", { class: "primary small", onClick: () => openLink(LINKS.omemo) }, "Get OMEMO for Thunderbird"));
+    case "free":
+      return h("div", { class: "omemo-banner" },
+        h("span", {}, "Call these contacts from Thunderbird: OMEMO Pro for Thunderbird adds audio calls with JMP.chat phone numbers, Cheogram and other XMPP apps ($10, one time)."),
+        h("button", { class: "primary small", onClick: () => openLink(LINKS.omemoPro) }, "Get OMEMO Pro"));
+    default:
+      return null;
+  }
 }
 
 function phonesTab(ctx) {
@@ -184,7 +198,29 @@ function phonesTab(ctx) {
           title: label(item.card),
           meta: phoneMeta(ctx, item),
         }))),
+    stagedBar(ctx),
   ];
+}
+
+/** Under the list while checked JMP.chat addresses wait for Apply. */
+function stagedBar(ctx) {
+  const { changes, added, removed } = stagedChanges(ctx);
+  if (!changes.length) {
+    return null;
+  }
+  const parts = [
+    added.length ? plural(added.length, "JMP.chat address to add", "JMP.chat addresses to add") : null,
+    removed.length ? plural(removed.length, "to remove", "to remove") : null,
+  ].filter(Boolean);
+  return pendingBar(ctx, {
+    text: `Not saved yet: ${parts.join(", ")}. Click Apply to write them to the cards.`,
+    applyLabel: `Apply ${plural(changes.length, "change", "changes")}`,
+    onApply: () => applyStaged(ctx),
+    onClear: () => {
+      ctx.state.chatStaged.clear();
+      ctx.render();
+    },
+  });
 }
 
 function fixesTab(ctx) {
@@ -264,7 +300,7 @@ export default {
     if (ctx.state.chatTab === "fixes") {
       const p = ctx.derived.prefix.find((x) => x.card.id === ctx.state.selected);
       return [
-        p ? cardSummary(p.card) : h("h3", {}, "Fix chat addresses"),
+        p ? cardSummary(p.card, () => openEditor(ctx, p.card.id)) : h("h3", {}, "Fix chat addresses"),
         h("p", {}, "Chat addresses saved by other apps sometimes lack the xmpp: in front, or sit in an older X-JABBER field that Thunderbird doesn't show. Thunderbird's card editor marks those red and won't save the card."),
         h("p", {}, "The fix writes them as xmpp: chat addresses. An X-JABBER field stays as it is, for the apps that read it."),
         helpBox,
@@ -274,7 +310,7 @@ export default {
     if (!item) {
       return [
         h("h3", {}, "Chat addresses"),
-        h("p", {}, "Check the phone contacts who should get a JMP.chat address, or Select all phone contacts, then Apply. A checked contact already has a chat address."),
+        h("p", {}, "Check the phone contacts who should get a JMP.chat address, or Select all phone contacts, then click Apply: nothing is written to a card until you do. A checked contact without the \"not saved yet\" tag already has a chat address."),
         h("p", {}, "To text someone who isn't in your chat list yet: search for them, select them, then Generate JMP.chat address."),
         helpBox,
         h("div", { class: "detail-actions" }, h("button", { onClick: () => openLink(LINKS.jmp) }, "About JMP.chat")),
@@ -283,7 +319,7 @@ export default {
     const gateway = gatewayOf(ctx);
     const e164 = numberFor(ctx, item);
     return [
-      cardSummary(item.card),
+      cardSummary(item.card, () => openEditor(ctx, item.card.id)),
       item.state === "none" || (item.state === "theirs" && item.choices.length)
         ? [
           item.choices.length > 1

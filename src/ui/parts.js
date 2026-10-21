@@ -164,8 +164,19 @@ export function emptyState(big, text) {
   return h("div", { class: "empty-state" }, h("div", { class: "big" }, big), text);
 }
 
-/** A card's name, book and fields, for the detail panel. */
-export function cardSummary(card) {
+/**
+ * The bar under a list while checked changes wait for Apply: what will
+ * change, Apply, and Clear when `onClear` is given.
+ */
+export function pendingBar(ctx, { text, applyLabel, onApply, onClear = null }) {
+  return h("div", { class: "pending-bar", role: "status" },
+    h("span", {}, text),
+    onClear ? h("button", { disabled: Boolean(ctx.state.busy), onClick: onClear }, "Clear") : null,
+    h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: onApply }, applyLabel));
+}
+
+/** A card's name, book and fields, for the detail panel; with `onEdit`, an Edit card button. */
+export function cardSummary(card, onEdit = null) {
   const fields = [
     ...card.phones.map((p) => ["Phone", p.value + (p.mobile ? " (mobile)" : "")]),
     ...card.emails.map((e) => ["Email", e.address]),
@@ -181,6 +192,7 @@ export function cardSummary(card) {
     fields.length
       ? h("ul", { class: "field-list" }, fields.map(([kind, value]) => h("li", {}, h("span", { class: "kind" }, kind), h("span", {}, value))))
       : h("p", {}, "No phone numbers or addresses on this card."),
+    onEdit ? h("div", { class: "detail-actions", style: { marginTop: "4px", marginBottom: "10px" } }, h("button", { onClick: onEdit }, "Edit card")) : null,
   ];
 }
 

@@ -297,3 +297,44 @@ test("the kept card gets a name and N from the others when it has none", () => {
   assert.equal(merged.nameParts.given, "Jane");
   assert.deepEqual(merged.emails.map((e) => e.address), ["jane@example.org"]);
 });
+
+test("one card edited on its own (Edit card): values changed, removed and added; the rest kept", () => {
+  const jane = card([
+    "FN:Jane Example",
+    "N:Example;Jane;;;",
+    "TEL;TYPE=cell;VALUE=TEXT:+1 555 123 4567",
+    "EMAIL;PREF=1:jane@example.org",
+    "EMAIL:old.jane@example.org",
+    "X-CUSTOM:kept as it is",
+  ], { id: "j" });
+  const options = mergeOptions([jane]);
+  const keys = (name) => options.multi.find((f) => f.name === name).values.map((v) => v.key);
+  const telKey = keys("TEL")[0];
+
+  // Nothing changed: the card comes back as it was.
+  const all = Object.fromEntries(options.multi.map((f) => [f.name, new Set(keys(f.name))]));
+  const same = mergeVCard([jane], "j", { name: "Jane Example", given: "Jane", family: "Example", multi: all, single: {}, note: "" });
+  assert.equal(same, jane.vCard);
+
+  const text = mergeVCard([jane], "j", {
+    name: "Jane Q. Example",
+    given: "Jane",
+    family: "Example",
+    multi: { TEL: new Set([telKey]), EMAIL: new Set(["jane@example.org"]) },
+    single: { ORG: "Example Co", BDAY: "1987-01-02" },
+    note: "Met at the fair",
+    edits: { TEL: { [telKey]: "+1 555 123 9999" } },
+    added: { IMPP: [{ value: "jane@chat.example.org", type: "" }], TEL: [{ value: "+1 555 222 3333", type: "work" }] },
+  });
+  const v = parseVCard(text);
+  assert.equal(first(v, "FN").value, "Jane Q. Example");
+  // The edited number keeps its type; the added one has the type picked.
+  assert.deepEqual(getAll(v, "TEL").map((p) => p.raw).sort(), ["TEL;TYPE=cell;VALUE=TEXT:+1 555 123 9999", "TEL;TYPE=work:+1 555 222 3333"]);
+  assert.deepEqual(getAll(v, "EMAIL").map((p) => p.value), ["jane@example.org"]);
+  // A chat address typed without xmpp: gets it, as Thunderbird's card editor wants.
+  assert.deepEqual(getAll(v, "IMPP").map((p) => p.value), ["xmpp:jane@chat.example.org"]);
+  assert.equal(first(v, "ORG").value, "Example Co");
+  assert.equal(first(v, "BDAY").value, "1987-01-02");
+  assert.equal(first(v, "NOTE").value, "Met at the fair");
+  assert.equal(first(v, "X-CUSTOM").value, "kept as it is");
+});

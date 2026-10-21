@@ -19,12 +19,7 @@ import { h, plural } from "../dom.js";
 import { toolbar, row, avatar, cardSummary, emptyState, matches, tag } from "../parts.js";
 import { label } from "../../core/card.js";
 import { mergeOptions, mergeVCard, pairKey, groupLinks, MULTI, ADD_TYPES } from "../../core/duplicates.js";
-
-/** How a value's type reads next to it. */
-const TYPE_NAMES = { cell: "mobile", mobile: "mobile", iphone: "mobile", home: "home", work: "work", fax: "fax", pager: "pager", main: "main", other: "other" };
-
-/** The "+ Add" buttons under fields with several values. */
-const ADD_LABELS = { TEL: "+ Add a phone number", EMAIL: "+ Add an email address", ADR: "+ Add an address", URL: "+ Add a website" };
+import { TYPE_NAMES, ADD_LABELS, PLACEHOLDERS, addressEditor } from "../card-editor.js";
 
 const groupKey = (group) => group.cards.map((c) => c.id).sort().join("|");
 
@@ -250,30 +245,6 @@ function groupPage(ctx, group) {
   ];
 }
 
-/** An address as Street, City, State, Postal code and Country boxes; PO box and extended parts are kept as they are. */
-function addressEditor(id, parts, onChange, disabled) {
-  const current = [...parts];
-  const box = (index, placeholder, extra = "") => h("input", {
-    type: "text",
-    id: `${id}-${extra || index}`,
-    class: extra,
-    value: current[index] ?? "",
-    placeholder,
-    disabled,
-    "aria-label": placeholder,
-    onInput: (e) => {
-      current[index] = e.target.value;
-      onChange([...current]);
-    },
-  });
-  return h("div", { class: "adr-edit" },
-    box(2, "Street", "street"),
-    box(3, "City"),
-    box(4, "State or region"),
-    box(5, "Postal code"),
-    box(6, "Country"));
-}
-
 /** Step 3: what the merged card has, every field editable or pickable. */
 function mergeDetails(ctx, ed, cards, section) {
   const byId = new Map(cards.map((c) => [c.id, c]));
@@ -361,7 +332,7 @@ function mergeDetails(ctx, ed, cards, section) {
             ? addressEditor(`add-adr-${i}`, a.value, (value) => {
               a.value = value;
             }, false)
-            : h("input", { type: "text", id: `add-${f.name}-${i}`, value: a.value, placeholder: f.label.replace(/s$/, ""), "aria-label": `New ${f.label}`, onInput: (e) => {
+            : h("input", { type: "text", id: `add-${f.name}-${i}`, value: a.value, placeholder: PLACEHOLDERS[f.name], "aria-label": `New ${f.label}`, onInput: (e) => {
               a.value = e.target.value;
             } }),
           ADD_TYPES[f.name]?.length > 1

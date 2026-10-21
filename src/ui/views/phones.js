@@ -5,7 +5,8 @@
 /** Phone numbers: every number in one format, each change checked or not before applying. */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, change, cardSummary, emptyState, selectAll, matches, tag } from "../parts.js";
+import { toolbar, row, change, cardSummary, emptyState, selectAll, matches, tag, pendingBar } from "../parts.js";
+import { openEditor } from "../card-editor.js";
 import { label } from "../../core/card.js";
 import { applyPhoneFixes } from "../../core/fixes.js";
 import { COUNTRIES } from "../../core/phone.js";
@@ -93,6 +94,13 @@ export default {
               meta: [h("span", {}, s.value), h("span", {}, SKIP_REASONS[s.reason])],
             })),
           ]),
+      on.length
+        ? pendingBar(ctx, {
+          text: `${plural(on.length, "number is", "numbers are")} checked. Nothing is saved until you click Apply.`,
+          applyLabel: `Apply ${plural(on.length, "change", "changes")}`,
+          onApply: () => applyChecked(ctx),
+        })
+        : null,
     ];
   },
 
@@ -101,14 +109,14 @@ export default {
     const about = [
       h("h4", {}, "Why one format"),
       h("p", {}, "Numbers written one way are easy to read and easy to match: other apps, and OMEMO for Thunderbird's chat contact names, find the same person whatever the format. International numbers (with + and the country code) work from anywhere."),
-      h("p", {}, "US and Canada numbers are grouped 3-3-4. Other countries' numbers get a simple grouping after the country code; pick the compact format for no spaces at all."),
+      h("p", {}, "US and Canada numbers are grouped 3-3-4. Other countries' numbers keep the grouping you typed; only the + and the country code are added. Pick the compact format for no spaces at all."),
       h("p", {}, "Only the number changes: its type (mobile, work, home) stays as it was."),
     ];
     if (!entry) {
       return [h("h3", {}, "Phone numbers"), h("p", {}, "Check the changes you want, then Apply. Unchecked numbers stay as they are."), about];
     }
     return [
-      cardSummary(entry.card),
+      cardSummary(entry.card, () => openEditor(ctx, entry.card.id)),
       h("h4", {}, "Proposed"),
       entry.fixes.length
         ? h("ul", { class: "field-list" }, entry.fixes.map((fix) => h("li", {}, change(fix.from, fix.to))))
