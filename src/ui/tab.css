@@ -549,3 +549,11 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 .sidebar-toggle { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
 .sidebar-toggle:hover { color: var(--text); }
 .sidebar-toggle .chevron { width: 10px; font-size: 9px; text-align: center; }
+
+/* ---------- Chat lists per account ---------- */
+.contact-panel .cp-accounts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 2px; }
+.contact-panel .cp-accounts .cp-hint { margin: 0; }
+.account-group { margin-top: 18px; }
+.account-group:first-child { margin-top: 4px; }
+.account-heading { margin: 0 0 6px; font-size: 14px; }
+.account-heading span { font-weight: normal; font-size: 12px; color: var(--text-meta); }

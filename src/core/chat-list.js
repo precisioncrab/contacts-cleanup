@@ -73,18 +73,21 @@ export function newCardFor(jid, name) {
 
 /**
  * The Chat addresses page's rows: every card with a phone number or a chat
- * address, as [{ card, addresses, jmp, number, address, inChat }].
- *   addresses  the card's own xmpp: chat addresses
+ * address, as [{ card, addresses, jmp, number, address, on, inChat }].
+ *   addresses  the card's own chat addresses
  *   jmp        the JMP.chat address its first number (mobile first) makes, at the gateway
  *   number     that number as written
- *   address    the one to add to the chat list: its own (a plain one before a
+ *   address    the one to add to a chat list: its own (a plain one before a
  *              phone number one), else the JMP.chat address
- *   inChat     whether the card is in the chat list (one of its addresses is,
- *              or a JMP.chat or Quicksy contact has one of its numbers);
- *              null when there's no chat list to ask (`has` is null)
- * `has(jid)` says whether a chat address is in the chat list.
+ *   on         the accounts whose chat list the card is on (one of its
+ *              addresses is there, or a JMP.chat or Quicksy contact has one of
+ *              its numbers)
+ *   inChat     whether it's on any of them; null when there's no chat list to ask
+ * `lists` is { <account>: has(jid) } (chatLists in src/ui/omemo-state.js);
+ * `has` alone is one list.
  */
-export function chatRows(cards, { has = null, gateway = DEFAULT_GATEWAY } = {}) {
+export function chatRows(cards, { lists = null, has = null, gateway = DEFAULT_GATEWAY } = {}) {
+  const tests = lists ?? (has ? { "": has } : null);
   const rows = [];
   for (const card of cards) {
     // Every chat address the card has, however it's written (a Google x-apple: one too), so none is added twice.
@@ -94,16 +97,17 @@ export function chatRows(cards, { has = null, gateway = DEFAULT_GATEWAY } = {}) 
       continue;
     }
     const jmp = choice ? jmpAddress(choice.e164, gateway) : null;
-    const inChat = has
-      ? addresses.some((a) => has(a)) || card.phones.some((p) => p.e164 && has(jmpAddress(p.e164, gateway)))
-      : null;
+    const on = tests
+      ? Object.entries(tests).filter(([, test]) => addresses.some((a) => test(a)) || card.phones.some((p) => p.e164 && test(jmpAddress(p.e164, gateway)))).map(([account]) => account)
+      : [];
     rows.push({
       card,
       addresses,
       jmp,
       number: choice?.value ?? card.phones[0]?.value ?? "",
       address: addresses.find((a) => !phoneOfChatAddress(a)) ?? addresses[0] ?? jmp,
-      inChat,
+      on,
+      inChat: tests ? on.length > 0 : null,
     });
   }
   return rows;

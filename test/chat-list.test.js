@@ -67,3 +67,18 @@ test("Chat addresses rows: own chat address first, else the JMP.chat address of 
   // Without a chat list, nobody is known to be in it or not.
   assert.deepEqual(chatRows(cards, { gateway: "cheogram.com" }).map((r) => r.inChat), [null, null, null, null, null]);
 });
+
+test("rows say which accounts' chat lists each person is on", () => {
+  const cards = [
+    card(["FN:On Both", "TEL;TYPE=cell:555-666-7777"], { id: "a" }),
+    card(["FN:On Second", "IMPP:xmpp:friend@example.org"], { id: "b" }),
+    card(["FN:On None", "TEL;TYPE=cell:555 444 1111"], { id: "c" }),
+  ];
+  const listOf = (...jids) => (jid) => jids.includes(jid) || jids.some((j) => phoneOfChatAddress(j) && phoneOfChatAddress(j) === phoneOfChatAddress(jid));
+  const lists = { "alice@example.org": listOf("+15556667777@cheogram.com"), "bob@example.org": listOf("+15556667777@cheogram.com", "friend@example.org") };
+  assert.deepEqual(chatRows(cards, { lists }).map((r) => [r.card.id, r.on, r.inChat]), [
+    ["a", ["alice@example.org", "bob@example.org"], true],
+    ["b", ["bob@example.org"], true],
+    ["c", [], false],
+  ]);
+});

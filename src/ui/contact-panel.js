@@ -23,7 +23,7 @@ import { comparable, parseVCard, serializeVCard } from "../core/vcard.js";
 import { cardModel, modelToVCard, newContactVCard, emptyModel, PHONE_TYPES, EMAIL_TYPES, ADDRESS_TYPES } from "../core/card-model.js";
 import { jmpAddress, normalizeGateway, DEFAULT_GATEWAY } from "../core/chat.js";
 import { phoneNumber } from "../core/phone.js";
-import { chatListHas, changeChatList, currentAccount } from "./omemo-state.js";
+import { chatLists, chatAccounts, accountLabel, changeChatList } from "./omemo-state.js";
 import { LINKS, openLink } from "../lib/links.js";
 
 const gatewayOf = (ctx) => normalizeGateway(ctx.state.settings.gateway) ?? DEFAULT_GATEWAY;
@@ -75,22 +75,31 @@ function withoutUid(vCard) {
   return serializeVCard(vcard);
 }
 
-/** The chat list changes the checkboxes ask for: { add: [{ jid, name }], remove: [jid] }. */
+/**
+ * The chat list changes the checkboxes ask for, per account:
+ * { <account>: { add: [{ jid, name }], remove: [jid] } }. d.chatList holds
+ * "<account>\n<chat address>" -> wanted.
+ */
 function chatListChanges(ctx, d, name) {
-  const has = chatListHas(ctx);
-  const add = [];
-  const remove = [];
-  if (!has) {
-    return { add, remove };
+  const lists = chatLists(ctx);
+  const changes = {};
+  if (!lists) {
+    return changes;
   }
-  for (const [jid, want] of d.chatList) {
+  for (const [key, want] of d.chatList) {
+    const [account, jid] = key.split("\n");
+    const has = lists[account];
+    if (!has) {
+      continue;
+    }
+    const change = (changes[account] ??= { add: [], remove: [] });
     if (want && !has(jid)) {
-      add.push({ jid, name });
+      change.add.push({ jid, name });
     } else if (!want && has(jid)) {
-      remove.push(jid);
+      change.remove.push(jid);
     }
   }
-  return { add, remove };
+  return changes;
 }
 
 async function save(ctx, card, d) {
@@ -125,9 +134,12 @@ async function save(ctx, card, d) {
     }
     ctx.state.drafts.delete(card.id);
   }
-  const chatLine = await changeChatList(ctx, chatListChanges(ctx, d, name));
-  if (chatLine) {
-    ctx.toast(chatLine);
+  const lines = [];
+  for (const [account, change] of Object.entries(chatListChanges(ctx, d, name))) {
+    lines.push(await changeChatList(ctx, change, account));
+  }
+  if (lines.filter(Boolean).length) {
+    ctx.toast(lines.filter(Boolean).join(" "));
   }
   ctx.render();
 }
@@ -193,10 +205,10 @@ export function contactPanel(ctx, card, { before = null } = {}) {
       touch();
     } }), "no year"));
 
-  // Chat list: shown when OMEMO for Thunderbird answers and can add people.
-  const has = chatListHas(ctx);
-  const account = currentAccount(ctx);
-  const canChatList = Boolean(has && ctx.state.omemo.canAdd);
+  // Chat lists: one checkbox per XMPP account, shown when OMEMO for Thunderbird answers and can add people.
+  const lists = chatLists(ctx);
+  const accounts = chatAccounts(ctx);
+  const canChatList = Boolean(lists && ctx.state.omemo.canAdd);
   const name = m.fn || [m.given, m.family].filter(Boolean).join(" ") || (card ? cardLabel(card) : "");
   const gateway = gatewayOf(ctx);
   const chatJids = new Set(m.chats.map((c) => bareChat(c.value)).filter(Boolean));
@@ -277,7 +289,6 @@ export function contactPanel(ctx, card, { before = null } = {}) {
     h("label", {}, "Chat addresses"),
     m.chats.map((c, i) => {
       const jid = bareChat(c.value);
-      const inList = jid && has ? (d.chatList.has(jid) ? d.chatList.get(jid) : has(jid)) : false;
       return h("div", { class: "cp-chat" },
         h("div", { class: "cp-line" },
           h("input", { type: "text", id: id(`chat-${i}`), value: c.value, placeholder: "xmpp:name@example.org", "aria-label": "Chat address", onInput: (e) => {
@@ -286,10 +297,15 @@ export function contactPanel(ctx, card, { before = null } = {}) {
           }, onChange: () => ctx.render() }),
           removeButton(m.chats, c)),
         canChatList && jid
-          ? h("label", { class: "cp-check", title: `Thunderbird's chat list for ${account.jid}` }, h("input", { type: "checkbox", checked: inList, onChange: (e) => {
-            d.chatList.set(jid, e.target.checked);
-            touch();
-          } }), "In chat list")
+          ? h("div", { class: "cp-accounts" }, h("span", { class: "cp-hint" }, "In the chat list of:"),
+            accounts.map((account) => {
+              const key = `${account.jid}\n${jid}`;
+              const on = d.chatList.has(key) ? d.chatList.get(key) : lists[account.jid](jid);
+              return h("label", { class: "cp-check", title: `Thunderbird's chat list for ${account.jid}` }, h("input", { type: "checkbox", checked: on, onChange: (e) => {
+                d.chatList.set(key, e.target.checked);
+                touch();
+              } }), accountLabel(account.jid));
+            }))
           : null);
     }),
     jmpChoices.map((choice) => addButton(`+ JMP.chat address for ${choice.number}`, () => {

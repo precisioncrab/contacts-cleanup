@@ -24,7 +24,7 @@ import { label } from "../../core/card.js";
 import { addChatAddress, applyPrefixFixes, normalizeGateway, DEFAULT_GATEWAY } from "../../core/chat.js";
 import { linkFor, linkToCard, newCardFor, chatRows } from "../../core/chat-list.js";
 import { MODES, namesRow, omemoTier, STATUS_ORDER } from "../../lib/omemo.js";
-import { refreshOmemo, refreshOmemoSoon, currentAccount, chatListHas, changeChatList } from "../omemo-state.js";
+import { refreshOmemo, refreshOmemoSoon, currentAccount, chatAccounts, chatLists, accountLabel, changeChatList } from "../omemo-state.js";
 import { LINKS, openLink } from "../../lib/links.js";
 
 export const CHAT_HELP = [
@@ -82,10 +82,10 @@ const FILTERS = [
 let rowsMemo = { inputs: [], rows: [] };
 
 function allRows(ctx) {
-  const inputs = [ctx.state.cards, currentAccount(ctx), gatewayOf(ctx), ctx.derived.prefix];
+  const inputs = [ctx.state.cards, ctx.state.omemo.result, gatewayOf(ctx), ctx.derived.prefix];
   if (inputs.some((x, i) => x !== rowsMemo.inputs[i])) {
     const fixIds = new Set(ctx.derived.prefix.map((p) => p.card.id));
-    rowsMemo = { inputs, rows: chatRows(ctx.state.cards, { has: chatListHas(ctx), gateway: gatewayOf(ctx) }).map((r) => ({ ...r, fix: fixIds.has(r.card.id) })) };
+    rowsMemo = { inputs, rows: chatRows(ctx.state.cards, { lists: chatLists(ctx), gateway: gatewayOf(ctx) }).map((r) => ({ ...r, fix: fixIds.has(r.card.id) })) };
   }
   return rowsMemo.rows;
 }
@@ -97,7 +97,8 @@ function contactRows(ctx) {
       && (filter === "all"
         || (filter === "none" && !r.addresses.length)
         || (filter === "notInChat" && r.inChat === false)
-        || (filter === "fix" && r.fix)));
+        || (filter === "fix" && r.fix)
+        || (filter.startsWith("on:") && r.on.includes(filter.slice(3)))));
 }
 
 async function fixAll(ctx) {
@@ -118,19 +119,22 @@ async function addJmp(ctx, rows) {
   }
 }
 
-/** Checked contacts not in the chat list go on it; a card without a chat address gets the JMP.chat address it's added with. */
-async function addToChatList(ctx, rows) {
-  const account = currentAccount(ctx);
-  const todo = rows.filter((r) => r.inChat === false && r.address);
+/**
+ * Checked contacts not on an account's chat list go on it; a card without a
+ * chat address gets the JMP.chat address it's added with. They stay checked,
+ * for another account.
+ */
+async function addToChatList(ctx, rows, account) {
+  const todo = rows.filter((r) => r.inChat !== null && !r.on.includes(account) && r.address);
   const cards = todo.filter((r) => !r.addresses.length);
   const go = await ctx.confirm({
-    title: `Add ${plural(todo.length, "person", "people")} to the chat list?`,
+    title: `Add ${plural(todo.length, "person", "people")} to ${accountLabel(account)}'s chat list?`,
     body: [
-      h("p", {}, `${todo.length === 1 ? `${label(todo[0].card)} goes` : "They go"} on the chat list of ${account.jid}, with the ${todo.length === 1 ? "name from the card" : "names from their cards"}. That list is kept on your XMPP server, so your other chat apps on that account show them too.`),
+      h("p", {}, `${todo.length === 1 ? `${label(todo[0].card)} goes` : "They go"} on the chat list of ${account}, with the ${todo.length === 1 ? "name from the card" : "names from their cards"}. That list is kept on your XMPP server, so your other chat apps on that account show them too.`),
       cards.length ? h("p", {}, `${plural(cards.length, "card has", "cards have")} no chat address yet, so ${cards.length === 1 ? "it gets" : "they get"} the JMP.chat address ${cards.length === 1 ? "it's" : "they're"} added with (Undo takes it off again).`) : null,
       h("p", {}, "Each one is asked to share their online status; JMP.chat numbers say yes by themselves. To take someone off later: uncheck In chat list in their editor, or right-click them in Thunderbird's chat list, Delete."),
     ],
-    ok: todo.length === 1 ? "Add to chat list" : `Add ${todo.length} to chat list`,
+    ok: todo.length === 1 ? `Add to ${accountLabel(account)}` : `Add ${todo.length} to ${accountLabel(account)}`,
   });
   if (!go) {
     return;
@@ -145,11 +149,8 @@ async function addToChatList(ctx, rows) {
   }
   ctx.state.busy = { text: "Adding to the chat list…" };
   ctx.render();
-  const line = await changeChatList(ctx, { add: todo.map((r) => ({ jid: r.address, name: label(r.card) })) });
+  const line = await changeChatList(ctx, { add: todo.map((r) => ({ jid: r.address, name: label(r.card) })) }, account);
   ctx.state.busy = null;
-  for (const r of todo) {
-    ctx.state.chat.sel.delete(r.card.id);
-  }
   ctx.render();
   ctx.toast(line);
 }
@@ -160,7 +161,8 @@ function contactsTab(ctx) {
   const rows = contactRows(ctx);
   const sel = ctx.state.chat.sel;
   const fixes = ctx.derived.prefix.length;
-  const canChatList = Boolean(chatListHas(ctx) && omemo.canAdd);
+  const accounts = chatAccounts(ctx);
+  const canChatList = Boolean(chatLists(ctx) && omemo.canAdd);
   return [
     fixes
       ? h("div", { class: "omemo-banner" },
@@ -181,7 +183,10 @@ function contactsTab(ctx) {
         h("select", { onChange: (e) => {
           ctx.state.chat.filter = e.target.value;
           ctx.render();
-        } }, FILTERS.filter(([value]) => value !== "notInChat" || canChatList).map(([value, text]) => h("option", { value, selected: ctx.state.chat.filter === value }, text)))),
+        } }, [
+          ...FILTERS.filter(([value]) => value !== "notInChat" || chatLists(ctx)),
+          ...accounts.map((a) => [`on:${a.jid}`, `On ${accountLabel(a.jid)}'s chat list`]),
+        ].map(([value, text]) => h("option", { value, selected: ctx.state.chat.filter === value }, text)))),
       h("label", {}, "JMP.chat gateway",
         h("input", {
           type: "text",
@@ -215,21 +220,21 @@ function contactsTab(ctx) {
                 : h("span", {}, `${r.number}: no country code, so no JMP.chat address (see Phone numbers)`),
             r.fix ? tag("to fix", "warn") : null,
             r.card.shadowed ? tag(`can't change: same ID as in ${r.card.shadowed}`, "warn") : null,
-            r.inChat ? tag("in chat list") : null,
+            // The accounts whose chat list the person is on.
+            r.on.map((account) => h("span", { class: "tag", title: `On the chat list of ${account}` }, accountLabel(account))),
           ],
         }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts with a phone number or chat address here.", "") }),
-    selectedBar(ctx, canChatList),
+    selectedBar(ctx, canChatList ? accounts : []),
   ];
 }
 
-/** Under the list while contacts are checked: what can be done with them. */
-function selectedBar(ctx, canChatList) {
+/** Under the list while contacts are checked: what can be done with them (`accounts`: the chat lists they can be added to). */
+function selectedBar(ctx, accounts) {
   const rows = contactRows(ctx).filter((r) => ctx.state.chat.sel.has(r.card.id) && !r.card.shadowed);
   if (!rows.length) {
     return null;
   }
   const jmp = rows.filter((r) => !r.addresses.length && r.jmp).length;
-  const chat = rows.filter((r) => r.inChat === false && r.address).length;
   const busy = Boolean(ctx.state.busy);
   return h("div", { class: "pending-bar", role: "status" },
     h("span", {}, `${plural(rows.length, "contact", "contacts")} checked.`),
@@ -239,17 +244,19 @@ function selectedBar(ctx, canChatList) {
     } }, "Clear"),
     h("button", { class: "primary", disabled: busy || !jmp, title: jmp ? "" : "Every checked contact has a chat address already", onClick: () => addJmp(ctx, rows) },
       jmp ? `Add JMP.chat address${jmp === 1 ? "" : `es (${jmp})`}` : "Add JMP.chat addresses"),
-    canChatList
-      ? h("button", { class: "primary", disabled: busy || !chat, title: chat ? "" : "Every checked contact is in the chat list already", onClick: () => addToChatList(ctx, rows) },
-        chat ? `Add to chat list${chat === 1 ? "" : ` (${chat})`}` : "Add to chat list")
-      : null);
+    // One button per account: "Add to alice", "Add to bob".
+    accounts.map((account) => {
+      const n = rows.filter((r) => !r.on.includes(account.jid) && r.address).length;
+      return h("button", { class: "primary", disabled: busy || !n, title: n ? `Add to the chat list of ${account.jid}` : `Every checked contact is on ${account.jid}'s chat list already`, onClick: () => addToChatList(ctx, rows, account.jid) },
+        `Add to ${accountLabel(account.jid)}${n > 1 ? ` (${n})` : ""}`);
+    }));
 }
 
 /* ---------- Who is this? (Add to a card, New card) ---------- */
 
 /** Opens "Who is this?" for a chat contact, with the cursor in the name box or the search box. */
-function openPick(ctx, jid, focus = "pick-name") {
-  ctx.state.chat.pick = { jid, name: "", search: "" };
+function openPick(ctx, jid, focus = "pick-name", account = null) {
+  ctx.state.chat.pick = { jid, name: "", search: "", account };
   ctx.state.selected = null;
   ctx.render();
   document.getElementById(focus)?.focus();
@@ -291,7 +298,7 @@ async function addToCard(ctx, jid, card) {
 function pickPage(ctx) {
   const pick = ctx.state.chat.pick;
   const link = linkFor(pick.jid);
-  const account = currentAccount(ctx);
+  const account = chatAccounts(ctx).find((a) => a.jid === pick.account) ?? currentAccount(ctx);
   const books = writableBooks(ctx);
   const bookId = books.some((b) => b.id === pick.book) ? pick.book
     : books.some((b) => b.id === ctx.state.settings.newCardBook) ? ctx.state.settings.newCardBook : books[0]?.id;
@@ -381,7 +388,7 @@ function accountBox(ctx, account) {
       h("span", { class: "jid" }, account.jid),
       h("label", { class: "choice" }, "Names from your address book",
         h("select", {
-          id: "names-mode",
+          id: `names-mode-${accountLabel(account.jid)}`,
           disabled: ctx.state.omemo.loading,
           onChange: (e) => setMode(ctx, account.jid, e.target.value),
         }, MODES.map(([value, text]) => h("option", { value, selected: account.mode === value }, text))))),
@@ -406,7 +413,7 @@ function unnamedSection(ctx, account) {
       : [
         h("p", { class: "hint" }, "These chat contacts aren't in your address book, so they show as an address. Add each one to the person's card, or make a new card."),
         h("div", { class: "chat-list" }, rows.map((c) => row(ctx, {
-          key: `jid:${c.jid}`,
+          key: `jid:${account.jid}|${c.jid}`,
           lead: h("div", { class: "avatar", style: { background: "var(--border-alt)" }, "aria-hidden": "true" }, "?"),
           title: shown(c.jid),
           meta: [
@@ -421,8 +428,8 @@ function unnamedSection(ctx, account) {
               ctx.setView("duplicates");
             } }, "Show the cards")]
             : [
-              h("button", { class: "small primary", disabled: Boolean(ctx.state.busy), onClick: () => openPick(ctx, c.jid, "pick-search") }, "Add to a card"),
-              h("button", { class: "small", disabled: Boolean(ctx.state.busy), onClick: () => openPick(ctx, c.jid) }, "New card"),
+              h("button", { class: "small primary", disabled: Boolean(ctx.state.busy), onClick: () => openPick(ctx, c.jid, "pick-search", account.jid) }, "Add to a card"),
+              h("button", { class: "small", disabled: Boolean(ctx.state.busy), onClick: () => openPick(ctx, c.jid, "pick-name", account.jid) }, "New card"),
             ],
         }))),
       ],
@@ -436,13 +443,14 @@ function namedSection(ctx, account) {
   if (!rows.length) {
     return null;
   }
-  return h("details", { class: "chat-details", open: Boolean(ctx.state.search) || ctx.state.chat.namedOpen, onToggle: (e) => {
-    ctx.state.chat.namedOpen = e.target.open;
+  const open = (ctx.state.chat.namedOpenBy ??= {});
+  return h("details", { class: "chat-details", open: Boolean(ctx.state.search) || Boolean(open[account.jid]), onToggle: (e) => {
+    open[account.jid] = e.target.open;
   } },
   h("summary", { class: "list-heading" }, `In your address book: ${rows.length}`),
   // The contact's name first (as Thunderbird's chat list shows it), then its number or address.
   h("div", { class: "chat-list" }, rows.map((c) => row(ctx, {
-    key: `jid:${c.jid}`,
+    key: `jid:${account.jid}|${c.jid}`,
     title: c.name || c.current || shown(c.jid),
     meta: [
       h("span", {}, shown(c.jid)),
@@ -455,22 +463,25 @@ function namedSection(ctx, account) {
 function chatListTab(ctx) {
   const omemo = ctx.state.omemo;
   const tier = omemoTier(omemo.status);
-  const account = currentAccount(ctx);
+  const accounts = chatAccounts(ctx);
   let body;
   if (!omemo.status || (omemo.loading && !omemo.result && tier !== "none")) {
     body = h("p", {}, "Asking OMEMO for Thunderbird…");
   } else if (tier === "none") {
     body = notInstalled(ctx);
-  } else if (!account) {
+  } else if (!accounts.length) {
     body = h("div", { class: "notice" }, omemo.error
       ? `OMEMO for Thunderbird answered with an error: ${omemo.error}`
       : "No XMPP account is connected right now. Connect one in Thunderbird's chat, then Refresh.");
   } else {
+    // One group per XMPP account: its names setting, the chat contacts with no name yet, the named ones.
     body = [
-      accountBox(ctx, account),
       omemo.error ? h("div", { class: "notice warn" }, `OMEMO for Thunderbird answered with an error: ${omemo.error}`) : null,
-      unnamedSection(ctx, account),
-      namedSection(ctx, account),
+      accounts.map((account) => h("section", { class: "account-group" },
+        h("h3", { class: "account-heading" }, `${accountLabel(account.jid)}`, h("span", {}, ` ${account.jid} \u00b7 ${plural(account.contacts.length, "chat contact", "chat contacts")}`)),
+        accountBox(ctx, account),
+        unnamedSection(ctx, account),
+        namedSection(ctx, account))),
     ];
   }
   return h("div", { class: "page", "data-scroll": "page" }, body);
@@ -484,10 +495,7 @@ export default {
   dot: "#20a39e",
 
   // The chat addresses to fix, and the chat contacts that need a card.
-  count: (ctx) => {
-    const account = currentAccount(ctx);
-    return ctx.derived.prefix.length + (account ? unnamedOf(account).length : 0) || null;
-  },
+  count: (ctx) => ctx.derived.prefix.length + chatAccounts(ctx).reduce((n, a) => n + unnamedOf(a).length, 0) || null,
 
   // Asks OMEMO afresh each time the page is shown, so it never shows an old answer.
   onShow(ctx) {
@@ -506,20 +514,12 @@ export default {
     }
     const omemo = ctx.state.omemo;
     const tier = omemoTier(omemo.status);
-    const accounts = omemo.result?.accounts ?? [];
-    const account = currentAccount(ctx);
     const onList = ctx.state.chat.tab === "list";
-    const unnamed = account ? unnamedOf(account).length : 0;
+    const unnamed = chatAccounts(ctx).reduce((n, a) => n + unnamedOf(a).length, 0);
     return [
       toolbar(ctx, {
         title: "Chat addresses",
         extra: [
-          accounts.length > 1
-            ? h("select", { "aria-label": "Chat account", title: "The XMPP account whose chat list is shown", onChange: (e) => {
-              ctx.state.chat.account = e.target.value;
-              ctx.render();
-            } }, accounts.map((a) => h("option", { value: a.jid, selected: a.jid === account?.jid }, a.jid)))
-            : null,
           tier !== "none" ? h("button", { disabled: omemo.loading, onClick: () => refreshOmemo(ctx) }, omemo.loading ? "Checking…" : "Refresh") : null,
         ],
       }),
@@ -550,24 +550,26 @@ export default {
     }
     const selected = String(ctx.state.selected ?? "");
     if (ctx.state.chat.tab === "list") {
-      const account = currentAccount(ctx);
-      const contact = account && selected.startsWith("jid:") ? account.contacts.find((c) => `jid:${c.jid}` === selected) : null;
+      const [accountJid, contactJid] = selected.startsWith("jid:") ? selected.slice(4).split("|") : [];
+      const account = chatAccounts(ctx).find((a) => a.jid === accountJid);
+      const contact = account?.contacts.find((c) => c.jid === contactJid);
       if (contact) {
         return [
           h("h3", {}, shown(contact.jid)),
           h("p", {}, contact.jid),
+          h("p", {}, `On the chat list of ${account.jid}.`),
           h("p", {}, namesRow(contact, account.mode)),
           contact.status === "unmatched"
             ? h("div", { class: "detail-actions" },
-              h("button", { class: "primary", onClick: () => openPick(ctx, contact.jid, "pick-search") }, "Add to a card"),
-              h("button", { onClick: () => openPick(ctx, contact.jid) }, "New card"))
+              h("button", { class: "primary", onClick: () => openPick(ctx, contact.jid, "pick-search", account.jid) }, "Add to a card"),
+              h("button", { onClick: () => openPick(ctx, contact.jid, "pick-name", account.jid) }, "New card"))
             : null,
           helpBox,
         ];
       }
       return [
         h("h3", {}, "Chat list"),
-        h("p", {}, "Thunderbird's chat list for the account, through OMEMO for Thunderbird. Chat contacts get their names from your cards; the ones no card has are listed under No name yet, each with Add to a card and New card."),
+        h("p", {}, "Thunderbird's chat list, one group per XMPP account, through OMEMO for Thunderbird. Chat contacts get their names from your cards; the ones no card has are listed under No name yet, each with Add to a card and New card. Someone on two accounts shows in both groups."),
         helpBox,
       ];
     }
@@ -577,8 +579,8 @@ export default {
     }
     return [
       h("h3", {}, "Chat addresses"),
-      h("p", {}, "Every contact with a phone number or a chat address. Check some (or Select all), then Add JMP.chat addresses to put the JMP.chat address their number makes on their cards, or Add to chat list to put them in Thunderbird's chat list."),
-      h("p", {}, "Select a contact to see and change everything on it. Its chat addresses have + JMP.chat address and an In chat list checkbox."),
+      h("p", {}, "Every contact with a phone number or a chat address, with the accounts whose chat list they're on (alice, bob, ...). Check some (or Select all), then Add JMP.chat addresses to put the JMP.chat address their number makes on their cards, or Add to <account> to put them on that account's chat list. Show picks one account's people."),
+      h("p", {}, "Select a contact to see and change everything on it. Each chat address has a checkbox per account: checked means it's on that account's chat list."),
       helpBox,
     ];
   },
