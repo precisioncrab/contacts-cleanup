@@ -32,7 +32,7 @@ export default {
         h("div", { class: "page-section" }, h("div", { class: "label" }, "Related add-ons"),
           h("div", { class: "about-links" },
             h("div", {}, link("OMEMO for Thunderbird", LINKS.omemo), ": end-to-end encrypted XMPP chat in Thunderbird (free)."),
-            h("div", {}, link("OMEMO Pro for Thunderbird", LINKS.omemoPro), ": adds audio calls."),
+            h("div", {}, link("OMEMO for Thunderbird + Calls", LINKS.omemoPro), ": adds audio calls."),
             h("div", {}, link("Daynizer", LINKS.daynizer), ": tasks, calendar and contacts with CalDAV and CardDAV sync, in Thunderbird."))),
 
         h("div", { class: "page-section" }, h("div", { class: "label" }, "Source and license"),

@@ -6,7 +6,7 @@
  * What OMEMO for Thunderbird says, shared by the Chat addresses page and
  * the contact editor: whether it's there, each account's chat list, and
  * whether it can add people to the chat list (OMEMO for Thunderbird 0.1.6,
- * OMEMO Pro 0.3.4 and later). Kept in ctx.state.omemo.
+ * the calls version 0.3.4 and later). Kept in ctx.state.omemo.
  */
 
 import { phoneOfChatAddress } from "../core/chat-list.js";

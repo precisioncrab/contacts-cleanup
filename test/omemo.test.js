@@ -46,5 +46,5 @@ test("each OMEMO add-on points to the next: nothing to free, free to Pro", () =>
   assert.equal(omemoTier(null), "none");
   assert.equal(omemoTier({ installed: false }), "none");
   assert.equal(omemoTier({ installed: true, info: { name: "OMEMO for Thunderbird", version: "0.1.5", pro: false, protocol: 1 } }), "free");
-  assert.equal(omemoTier({ installed: true, info: { name: "OMEMO Pro for Thunderbird", version: "0.3.2", pro: true, protocol: 1 } }), "pro");
+  assert.equal(omemoTier({ installed: true, info: { name: "OMEMO for Thunderbird + Calls", version: "0.3.5", pro: true, protocol: 1 } }), "pro");
 });

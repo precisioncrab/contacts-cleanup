@@ -439,7 +439,7 @@ function menus() {
 function omemoMenuItem() {
   switch (omemoTier(state.omemo.status)) {
     case "free":
-      return { label: "OMEMO Pro for Thunderbird", onClick: () => openLink(LINKS.omemoPro) };
+      return { label: "OMEMO for Thunderbird + Calls", onClick: () => openLink(LINKS.omemoPro) };
     case "pro":
       return { label: "OMEMO settings", onClick: () => ctx.omemo.openOptions("settings").catch(() => {}) };
     default:
@@ -538,14 +538,14 @@ function renderSidebar() {
 
 /**
  * Under Chat, the next OMEMO add-on to get (its page, in the web browser):
- * OMEMO for Thunderbird when neither answers, OMEMO Pro for Thunderbird
- * when the free one does; "OMEMO settings" once Pro does.
+ * OMEMO for Thunderbird when neither answers, OMEMO for Thunderbird + Calls
+ * when the free one does; "OMEMO settings" once the calls version does.
  */
 function omemoItem() {
   const item = {
     none: { text: "Get OMEMO for Thunderbird", icon: "\u2197", title: "End-to-end encrypted XMPP chat in Thunderbird. Opens its page in your web browser.", go: () => openLink(LINKS.omemo) },
-    free: { text: "Get OMEMO Pro", icon: "\u2197", title: "OMEMO Pro adds audio calls in Thunderbird, with JMP.chat numbers, Cheogram and other XMPP apps. Opens its page in your web browser.", go: () => openLink(LINKS.omemoPro) },
-    pro: { text: "OMEMO settings", icon: "\u2699", title: "Open OMEMO Pro for Thunderbird's settings", go: () => ctx.omemo.openOptions("settings").catch(() => {}) },
+    free: { text: "Get OMEMO + Calls", icon: "\u2197", title: "OMEMO for Thunderbird + Calls adds audio calls in Thunderbird, with Cheogram, Conversations and other XMPP apps. Opens its page in your web browser.", go: () => openLink(LINKS.omemoPro) },
+    pro: { text: "OMEMO settings", icon: "\u2699", title: "Open the OMEMO add-on's settings", go: () => ctx.omemo.openOptions("settings").catch(() => {}) },
   }[omemoTier(state.omemo.status)];
   const go = item.go;
   return h("div", {

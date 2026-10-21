@@ -11,7 +11,8 @@ export const LINKS = {
   issues: "https://github.com/precisioncrab/contacts-cleanup/issues",
   // OMEMO for Thunderbird's Gumroad page (free, pay what you want).
   omemo: "https://precisioncrab.gumroad.com/l/omemo",
-  // OMEMO Pro for Thunderbird's Gumroad page (paid, adds calls).
+  // The Gumroad page of OMEMO for Thunderbird + Calls (paid, adds calls; called OMEMO
+  // Pro for Thunderbird until 2026-10-21, so the link keeps the old name).
   omemoPro: "https://precisioncrab.gumroad.com/l/omemo-pro",
   daynizer: "https://addons.thunderbird.net/en-US/thunderbird/addon/daynizer/",
   jmp: "https://jmp.chat/",

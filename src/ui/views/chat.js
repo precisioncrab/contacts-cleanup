@@ -14,7 +14,7 @@
  *   Chat list  Thunderbird's chat list, through OMEMO for Thunderbird: the
  *              names setting, and the chat contacts no card has, each with
  *              Add to a card and New card (the "Who is this?" page).
- * Everything here is free; only calls are OMEMO Pro.
+ * Everything here is free; only calls are in OMEMO for Thunderbird + Calls.
  */
 
 import { h, plural } from "../dom.js";

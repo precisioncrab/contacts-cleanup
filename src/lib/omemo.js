@@ -15,7 +15,7 @@
  *   { command: "chatNames.setMode", jid, mode } -> the same, after writing
  *   { command: "openOptions", section }     -> opens its options page
  * `mode` is "off", "local" (Thunderbird only) or "server" (also the XMPP server).
- * OMEMO for Thunderbird 0.1.6 (and OMEMO Pro 0.3.4) and later also answer:
+ * OMEMO for Thunderbird 0.1.6 (and the calls version 0.3.4) and later also answer:
  *   { command: "chatContacts.hello" }       -> { add: true, remove: true }
  *   { command: "chatContacts.add", account, contacts: [{ jid, name }] }
  *                                           -> { added: [jid], failed: [{ jid, error }] }
@@ -36,7 +36,7 @@ export const MODES = [
 
 /**
  * What's installed, from status(): "none" (nothing answers), "free"
- * (OMEMO for Thunderbird) or "pro" (OMEMO Pro for Thunderbird). Each one
+ * (OMEMO for Thunderbird) or "pro" (OMEMO for Thunderbird + Calls, formerly OMEMO Pro). Each one
  * points to the next: nothing to the free add-on, free to Pro.
  */
 export function omemoTier(status) {
@@ -67,7 +67,7 @@ export function omemoClient(send = (id, message) => browser.runtime.sendMessage(
     preview: () => call({ command: "chatNames.preview" }),
     setMode: (jid, mode) => call({ command: "chatNames.setMode", jid, mode }),
     openOptions: (section = "contacts") => call({ command: "openOptions", section }),
-    /** Whether this OMEMO add-on adds people to the chat list (OMEMO for Thunderbird 0.1.6, OMEMO Pro 0.3.4 and later). */
+    /** Whether this OMEMO add-on adds people to the chat list (OMEMO for Thunderbird 0.1.6, the calls version 0.3.4 and later). */
     async canAddContacts() {
       try {
         return (await call({ command: "chatContacts.hello" }))?.add === true;
