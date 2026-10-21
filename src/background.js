@@ -61,7 +61,8 @@ async function openTab() {
   }
 }
 
-browser.action.onClicked.addListener(openTab);
+// Manifest V2 (see src/lib/addressbook.js for why): the toolbar button is browserAction.
+(browser.browserAction ?? browser.action).onClicked.addListener(openTab);
 
 const MENU_ID = "contacts-cleanup-open";
 

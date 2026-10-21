@@ -32,7 +32,7 @@ function load({ spaces = true, existing = [], tabOpen = false } = {}) {
         return true;
       },
     },
-    action: { onClicked: event() },
+    browserAction: { onClicked: event() },
     menus: { onClicked: event(), removeAll: async () => calls.push(["menus.removeAll"]), create: (props) => calls.push(["menus.create", props.contexts[0]]) },
     tabs: { create: async ({ url }) => calls.push(["tabs.create", url]) },
     spaces: spaces ? {
@@ -55,7 +55,7 @@ test("adds the sidebar button, and the toolbar button opens that space", async (
   const { browser, calls } = load();
   await settle();
   assert.deepEqual(calls[0], ["spaces.create", "contacts_cleanup", "moz-extension://cc/src/ui/tab.html", "Contacts Cleanup"]);
-  await browser.action.onClicked.listeners[0]();
+  await browser.browserAction.onClicked.listeners[0]();
   assert.deepEqual(calls.at(-1), ["spaces.open", 7]);
 });
 
@@ -77,7 +77,7 @@ test("at every start the button is added again (Thunderbird forgets add-on space
 
 test("without spaces: an open tab comes to the front, else a new tab", async () => {
   const open = load({ spaces: false, tabOpen: true });
-  await open.browser.action.onClicked.listeners[0]();
+  await open.browser.browserAction.onClicked.listeners[0]();
   assert.deepEqual(open.calls.filter((c) => c[0] !== "warn"), [["sendMessage", "focus"]]);
   const closed = load({ spaces: false });
   await closed.browser.menus.onClicked.listeners[0]({ menuItemId: "contacts-cleanup-open" });

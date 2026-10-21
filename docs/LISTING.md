@@ -43,7 +43,7 @@ Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
 - Screenshots to take (made-up cards): Duplicates list, the merge page, Phone numbers, the Chat page with the help panel, one in light and one in dark.
 
 ## Notes for the reviewer
-Contacts Cleanup uses only the addressBooks, addressBooks.contacts, menus, spaces and storage APIs. Changes are written with addressBooks.contacts.update and create (vCard text), always after the user clicks Apply; each card's previous vCard is kept in storage.local for undo. The Chat page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
+Contacts Cleanup is a Manifest V2 add-on using only the addressBooks, contacts, menus, spaces and storage APIs (V2 because Thunderbird 158's V3 contacts.update and create store every character of the vCard as a custom property on the card). Changes are written with contacts.update and create ({ vCard }), always after the user clicks Apply or Save; each card's previous vCard is kept in storage.local for undo. The Chat page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
 
 ## Open (maintainer)
 - The Chat page and this description point to OMEMO for Thunderbird, which is installed from file and needs `xpinstall.signatures.required` turned off. A reviewer could object to sending people toward an unsigned add-on. Our text never mentions turning signatures off; that's on the OMEMO page itself. If a reviewer objects, the fallback is to drop the link from the listing and keep the in-app page.

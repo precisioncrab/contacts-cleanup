@@ -9,6 +9,7 @@ Kept separate from Daynizer's add-on (decided 2026-10-19): its own ATN listing i
 
 ## Rules
 - Official Thunderbird WebExtension APIs only, never an Experiment.
+- Manifest V2 (from 0.1.16), not V3: Thunderbird 158's V3 `contacts.update` and `create` store every character of the vCard as a property on the card (see `src/lib/addressbook.js`). Back to V3 only once Thunderbird fixes that.
 - The user sees every change before it happens, and every applied change can be undone.
 - MPL-2.0, no copyleft code.
 

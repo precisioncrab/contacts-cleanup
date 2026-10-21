@@ -121,6 +121,9 @@ async function reload() {
     state.books = [];
     state.loadError = e?.message ?? String(e);
   }
+  // Leftover properties from Thunderbird's Manifest V3 contacts bug, in every writable book (src/lib/addressbook.js).
+  const damaged = state.books.filter((b) => !b.readOnly && !b.remote).flatMap((b) => b.contacts).filter((c) => c.junk > 0);
+  state.junk = { cards: damaged.length, fields: damaged.reduce((n, c) => n + c.junk, 0), ids: damaged.map((c) => c.id) };
   const excluded = new Set(state.settings.excludedBooks);
   state.cards = state.books
     .filter((book) => !book.readOnly && !book.remote && !excluded.has(book.id))
@@ -531,10 +534,61 @@ function renderMain() {
   }
   fill(main,
     h("div", { id: "menu-host" }),
+    repairBanner(),
     body,
     state.busy ? h("div", { class: "toolbar-filters" }, h("span", { id: "progress", class: "progress" })) : null);
   renderMenu();
   renderProgress();
+}
+
+/**
+ * Thunderbird's Manifest V3 contacts bug left thousands of properties on the
+ * cards earlier versions changed, which slows Thunderbird and this add-on
+ * down. The bar offers to clear them; each card is saved again as it is.
+ */
+function repairBanner() {
+  const junk = state.junk;
+  if (state.loading || !junk?.cards) {
+    return null;
+  }
+  return h("div", { class: "omemo-banner repair-banner" },
+    h("span", {}, `${plural(junk.cards, "contact carries", "contacts carry")} ${junk.fields.toLocaleString()} leftover fields from a Thunderbird bug that earlier versions of this add-on ran into. They make Thunderbird and this add-on slow. The contact details are fine.`),
+    h("button", { class: "primary small", disabled: Boolean(state.busy), onClick: () => repairAll() }, "Repair"));
+}
+
+async function repairAll() {
+  const junk = state.junk;
+  const go = await confirmDialog({
+    title: `Repair ${plural(junk.cards, "contact", "contacts")}?`,
+    body: [
+      h("p", {}, `Removes the ${junk.fields.toLocaleString()} leftover fields Thunderbird stored on ${plural(junk.cards, "contact", "contacts")} (a field for every character of the card). Nothing on the contacts changes: each one is saved again as it is.`),
+      h("p", {}, "Thunderbird uploads the saved contacts of synced address books (Google, CardDAV) to their server again, with the same details. That can take a few minutes for many contacts."),
+    ],
+    ok: "Repair",
+  });
+  if (!go) {
+    return;
+  }
+  applying = true;
+  let done = 0;
+  let cleared = 0;
+  const failed = [];
+  for (const id of junk.ids) {
+    state.busy = { text: `Repairing ${done + 1} of ${junk.ids.length}…` };
+    renderProgress();
+    try {
+      cleared += await api.repair(id);
+    } catch (e) {
+      failed.push(e?.message ?? String(e));
+    }
+    done++;
+  }
+  state.busy = null;
+  applying = false;
+  await reload();
+  toast(failed.length
+    ? `Repaired ${done - failed.length} of ${done} contacts (${cleared.toLocaleString()} fields removed). ${failed.length} couldn't be saved: ${failed[0]}`
+    : `Repaired ${plural(done, "contact", "contacts")}: ${cleared.toLocaleString()} leftover fields removed.`, { error: failed.length > 0 });
 }
 
 function renderRail() {

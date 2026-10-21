@@ -112,10 +112,8 @@ async function addJmp(ctx, rows) {
   const entry = await ctx.apply(`JMP.chat addresses: ${plural(todo.length, "card", "cards")}`,
     todo.map((r) => ({ type: "update", id: r.card.id, vCard: addChatAddress(r.card.vCard, r.jmp), label: label(r.card) })),
     { generated: { added: todo.map((r) => [r.card.id, r.jmp]), removed: [] } });
+  // The contacts stay checked, so Add to chat list can follow.
   if (entry) {
-    for (const r of todo) {
-      ctx.state.chat.sel.delete(r.card.id);
-    }
     ctx.render();
   }
 }

@@ -37,7 +37,9 @@ const writableBooks = (ctx) => {
 /** The edits for a contact, made from the card when there are none (or the card changed and nothing was edited). */
 function draftFor(ctx, card) {
   let d = ctx.state.drafts.get(card.id);
-  if (!d || (d.base !== card.vCard && !d.touched)) {
+  // The card changed (saved here or elsewhere): start from it again unless there are real edits waiting.
+  const edited = d && d.touched && (d.chatList.size || d.book !== card.parentId || JSON.stringify(d.model) !== JSON.stringify(cardModel(d.base)));
+  if (!d || (d.base !== card.vCard && !edited)) {
     d = { base: card.vCard, model: cardModel(card.vCard), book: card.parentId, chatList: new Map(), touched: false };
     ctx.state.drafts.set(card.id, d);
   }

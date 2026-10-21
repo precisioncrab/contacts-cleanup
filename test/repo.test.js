@@ -20,7 +20,8 @@ const sources = packageFiles().filter((f) => /\.(js|css|html)$/.test(f));
 
 test("no Experiment, and only the permissions it needs", () => {
   assert.equal(manifest.experiment_apis, undefined);
-  assert.equal(manifest.manifest_version, 3);
+  // V2: Thunderbird 158's V3 contacts.update stores the vCard's characters as properties (src/lib/addressbook.js).
+  assert.equal(manifest.manifest_version, 2);
   assert.deepEqual([...manifest.permissions].sort(), ["addressBooks", "menus", "storage"]);
   assert.equal(manifest.host_permissions, undefined);
   assert.equal(manifest.browser_specific_settings.gecko.id, "contacts-cleanup@precisioncrab");
@@ -32,7 +33,7 @@ test("every file the manifest names is in the package", () => {
   const named = [
     ...manifest.background.scripts,
     ...Object.values(manifest.icons),
-    ...Object.values(manifest.action.default_icon),
+    ...Object.values(manifest.browser_action.default_icon),
   ];
   for (const file of named) {
     assert.ok(files.has(file), file);

@@ -3,14 +3,39 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Thunderbird's address books, through the official API only
- * (addressBooks and addressBooks.contacts, Manifest V3, Thunderbird 128
- * and later). The `api` object is what src/core/history.js expects.
+ * Thunderbird's address books, through the official API only, as a
+ * Manifest V2 add-on (browser.contacts). The `api` object is what
+ * src/core/history.js expects.
+ *
+ * Why Manifest V2: in Thunderbird 158 (ext-addressBook.js), the Manifest V3
+ * contacts.update(id, vCard) and contacts.create(parentId, vCard) pass the
+ * vCard text on to addProperties(), which stores every character of it as a
+ * custom property named "0", "1", "2", ... on the card. Contacts Cleanup
+ * 0.1.0 to 0.1.15 were V3, and a card with a photo collected tens of
+ * thousands of them, which made everything slow. In Manifest V2 the vCard
+ * goes in as { vCard }, a property Thunderbird keeps out, so nothing extra
+ * is stored; and an update can clear those leftover properties (repair).
  */
 
-const contacts = () => browser.addressBooks.contacts;
+const contacts = () => browser.contacts ?? browser.addressBooks.contacts;
 
-/** Every address book with its cards: [{ id, name, readOnly, remote, contacts: [ContactNode] }]. */
+/** A property Thunderbird stored from one character of a vCard (the bug above): a name that's only digits. */
+export const isJunkProperty = (name) => /^\d+$/.test(name);
+
+/** A contact node as the rest of the add-on uses it: { id, parentId, readOnly, vCard, junk } (junk: how many leftover properties). */
+function contactOf(node) {
+  const properties = node.properties ?? {};
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    type: node.type,
+    readOnly: Boolean(node.readOnly),
+    vCard: node.vCard ?? properties.vCard,
+    junk: Object.keys(properties).filter(isJunkProperty).length,
+  };
+}
+
+/** Every address book with its cards: [{ id, name, readOnly, remote, contacts: [contact] }]. */
 export async function loadBooks() {
   const books = await browser.addressBooks.list(true);
   return books.map((book) => ({
@@ -18,7 +43,7 @@ export async function loadBooks() {
     name: book.name,
     readOnly: Boolean(book.readOnly),
     remote: Boolean(book.remote),
-    contacts: (book.contacts ?? []).filter((node) => typeof node.vCard === "string"),
+    contacts: (book.contacts ?? []).map(contactOf).filter((c) => typeof c.vCard === "string"),
   }));
 }
 
@@ -38,24 +63,17 @@ const PHOTO_LIMIT = 2 * 1024 * 1024;
 export const api = {
   async get(id) {
     try {
-      return (await contacts().get(id)) ?? null;
+      const node = await contacts().get(id);
+      return node ? contactOf(node) : null;
     } catch {
       return null;
     }
   },
-  async update(id, vCard) {
-    try {
-      await contacts().update(id, vCard);
-    } catch (e) {
-      // The MV3 schema takes the vCard text; some guides show { vCard }.
-      if (!/vCard|argument|type/i.test(e?.message ?? "")) {
-        throw e;
-      }
-      await contacts().update(id, { vCard });
-    }
+  update(id, vCard) {
+    return contacts().update(id, { vCard });
   },
   create(parentId, vCard) {
-    return contacts().create(parentId, vCard);
+    return contacts().create(parentId, null, { vCard });
   },
   remove(id) {
     return contacts().delete(id);
@@ -68,6 +86,20 @@ export const api = {
     const blob = await (await fetch(dataUrl)).blob();
     const type = blob.type || "image/jpeg";
     await contacts().setPhoto(id, new File([blob], `photo.${type.split("/")[1] ?? "jpg"}`, { type }));
+  },
+  /**
+   * Clears a card's leftover properties (the bug above) and saves it again
+   * as it is: its vCard doesn't change. Returns how many were cleared.
+   */
+  async repair(id) {
+    const node = await contacts().get(id);
+    const properties = node?.properties ?? {};
+    const junk = Object.keys(properties).filter(isJunkProperty);
+    if (!junk.length) {
+      return 0;
+    }
+    await contacts().update(id, { vCard: properties.vCard, ...Object.fromEntries(junk.map((name) => [name, null])) });
+    return junk.length;
   },
 };
 
