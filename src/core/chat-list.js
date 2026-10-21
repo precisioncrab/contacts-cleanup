@@ -72,34 +72,38 @@ export function newCardFor(jid, name) {
 }
 
 /**
- * The cards that aren't in a chat list yet: [{ card, jid, via, number }].
- * A card is in it when one of its chat addresses is, or when a chat
- * contact's phone number (a JMP.chat or Quicksy address) is one of the
- * card's numbers. Otherwise it's offered with its own chat address
- * (`via` "chat"), else its first number, mobile first, at the gateway
- * (`via` "phone", with the number as written).
+ * The Chat addresses page's rows: every card with a phone number or a chat
+ * address, as [{ card, addresses, jmp, number, address, inChat }].
+ *   addresses  the card's own xmpp: chat addresses
+ *   jmp        the JMP.chat address its first number (mobile first) makes, at the gateway
+ *   number     that number as written
+ *   address    the one to add to the chat list: its own (a plain one before a
+ *              phone number one), else the JMP.chat address
+ *   inChat     whether the card is in the chat list (one of its addresses is,
+ *              or a JMP.chat or Quicksy contact has one of its numbers);
+ *              null when there's no chat list to ask (`has` is null)
+ * `has(jid)` says whether a chat address is in the chat list.
  */
-export function notInChat(cards, contactJids, gateway = DEFAULT_GATEWAY) {
-  const jids = new Set(contactJids.map((j) => String(j).toLowerCase()));
-  const phones = new Set(contactJids.map(phoneOfChatAddress).filter(Boolean));
-  const out = [];
+export function chatRows(cards, { has = null, gateway = DEFAULT_GATEWAY } = {}) {
+  const rows = [];
   for (const card of cards) {
-    const own = [...new Set(card.chat.filter((c) => c.kind === "xmpp").map((c) => c.address))];
-    const inChat = own.some((a) => jids.has(a) || phones.has(phoneOfChatAddress(a)))
-      || card.phones.some((p) => p.e164 && phones.has(p.e164));
-    if (inChat) {
-      continue;
-    }
-    // A plain chat address before one that's a phone number.
-    const address = own.find((a) => !phoneOfChatAddress(a)) ?? own[0];
-    if (address) {
-      out.push({ card, jid: address, via: "chat" });
-      continue;
-    }
+    const addresses = [...new Set(card.chat.filter((c) => c.kind === "xmpp").map((c) => c.address))];
     const choice = phoneChoices(card)[0];
-    if (choice) {
-      out.push({ card, jid: jmpAddress(choice.e164, gateway), via: "phone", number: choice.value });
+    if (!addresses.length && !card.phones.length) {
+      continue;
     }
+    const jmp = choice ? jmpAddress(choice.e164, gateway) : null;
+    const inChat = has
+      ? addresses.some((a) => has(a)) || card.phones.some((p) => p.e164 && has(jmpAddress(p.e164, gateway)))
+      : null;
+    rows.push({
+      card,
+      addresses,
+      jmp,
+      number: choice?.value ?? card.phones[0]?.value ?? "",
+      address: addresses.find((a) => !phoneOfChatAddress(a)) ?? addresses[0] ?? jmp,
+      inChat,
+    });
   }
-  return out;
+  return rows;
 }

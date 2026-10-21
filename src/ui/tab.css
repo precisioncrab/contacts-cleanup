@@ -514,3 +514,39 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 .pick-new { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; max-width: 680px; }
 .page-section .pick-new input[type="text"] { flex: 1; min-width: 200px; width: auto; }
 .page-section .pick-new select { width: auto; }
+
+/* ---------- Contact editor in the right panel (Daynizer's contact panel) ---------- */
+.contact-panel label { display: block; font-size: 11px; color: var(--text-muted); margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .03em; }
+.contact-panel input[type="text"], .contact-panel textarea, .contact-panel select, .contact-panel input[type="date"] {
+  width: 100%; background: var(--bg-field); border: 1px solid var(--border-strong); border-radius: 6px;
+  padding: 6px 8px; color: var(--text); font-size: 13px;
+}
+.contact-panel textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+.contact-panel .detail-row { display: flex; gap: 10px; }
+.contact-panel .detail-row > div { flex: 1; min-width: 0; }
+.contact-panel .cp-line { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.contact-panel .cp-line input[type="text"] { flex: 1; min-width: 0; }
+.contact-panel .cp-line .spacer { flex: 1; }
+.contact-panel select.cp-type { flex: 0 0 92px; width: 92px; padding: 6px 4px; font-size: 12px; }
+.contact-panel .cp-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 0 4px; }
+.contact-panel .cp-remove:hover { color: var(--danger-text); }
+.contact-panel .cp-add {
+  display: block; background: transparent; border: 1px dashed var(--border-alt); color: var(--text-muted);
+  border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; margin-top: 4px;
+}
+.contact-panel .cp-add:hover { color: var(--text); border-color: var(--accent-color); }
+.contact-panel label.cp-check { display: inline-flex; align-items: center; gap: 5px; margin: 0; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.contact-panel .cp-date { display: flex; align-items: center; gap: 8px; }
+.contact-panel .cp-date input[type="date"] { flex: 1; min-width: 0; }
+.contact-panel .cp-chat { margin-bottom: 6px; }
+.contact-panel .cp-chat .cp-line { margin-bottom: 3px; }
+.contact-panel .cp-address { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.contact-panel .cp-address .cp-line, .contact-panel .cp-address .cp-adr-2 { grid-column: 1 / -1; margin: 0; }
+.contact-panel .cp-hint { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; line-height: 1.45; }
+.contact-panel .detail-actions .link { flex: 0 0 auto; padding: 0; }
+
+/* ---------- Sidebar categories that fold away ---------- */
+.sidebar-toggle { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+.sidebar-toggle:hover { color: var(--text); }
+.sidebar-toggle .chevron { width: 10px; font-size: 9px; text-align: center; }
+.sidebar-item.sidebar-sub { padding-left: 30px; font-size: 12px; }

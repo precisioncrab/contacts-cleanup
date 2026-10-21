@@ -5,8 +5,8 @@
 /** Phone numbers: every number in one format, each change checked or not before applying. */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, change, cardSummary, emptyState, selectAll, matches, tag, pendingBar } from "../parts.js";
-import { openEditor } from "../card-editor.js";
+import { toolbar, row, change, emptyState, selectAll, matches, tag, pendingBar } from "../parts.js";
+import { contactPanel } from "../contact-panel.js";
 import { label } from "../../core/card.js";
 import { applyPhoneFixes } from "../../core/fixes.js";
 import { COUNTRIES } from "../../core/phone.js";
@@ -115,16 +115,12 @@ export default {
     if (!entry) {
       return [h("h3", {}, "Phone numbers"), h("p", {}, "Check the changes you want, then Apply. Unchecked numbers stay as they are."), about];
     }
-    return [
-      cardSummary(entry.card, () => openEditor(ctx, entry.card.id)),
-      h("h4", {}, "Proposed"),
-      entry.fixes.length
-        ? h("ul", { class: "field-list" }, entry.fixes.map((fix) => h("li", {}, change(fix.from, fix.to))))
-        : h("p", {}, "Nothing to change."),
-      entry.skipped.length
-        ? [h("h4", {}, "Left as they are"), h("ul", { class: "field-list" }, entry.skipped.map((s) => h("li", {}, `${s.value}: ${SKIP_REASONS[s.reason]}`)))]
-        : null,
-      about,
-    ];
+    return contactPanel(ctx, entry.card, {
+      before: h("div", { class: "notice" },
+        entry.fixes.length
+          ? ["Proposed: ", entry.fixes.map((fix, i) => [i ? ", " : "", change(fix.from, fix.to)])]
+          : "Nothing to change.",
+        entry.skipped.length ? h("div", {}, `Left as they are: ${entry.skipped.map((s) => `${s.value} (${SKIP_REASONS[s.reason]})`).join(", ")}`) : null),
+    });
   },
 };

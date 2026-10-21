@@ -15,12 +15,14 @@
  *   { command: "chatNames.setMode", jid, mode } -> the same, after writing
  *   { command: "openOptions", section }     -> opens its options page
  * `mode` is "off", "local" (Thunderbird only) or "server" (also the XMPP server).
- * OMEMO Pro for Thunderbird 0.3.3 and later also answers:
- *   { command: "chatContacts.hello" }       -> { add: true }
+ * OMEMO for Thunderbird 0.1.6 (and OMEMO Pro 0.3.4) and later also answer:
+ *   { command: "chatContacts.hello" }       -> { add: true, remove: true }
  *   { command: "chatContacts.add", account, contacts: [{ jid, name }] }
  *                                           -> { added: [jid], failed: [{ jid, error }] }
- * which puts each contact on the account's contact list on the XMPP server,
- * with its name, and asks for its presence.
+ *   { command: "chatContacts.remove", account, jids: [jid] }
+ *                                           -> { removed: [jid], failed: [{ jid, error }] }
+ * which put people on the account's chat list (its contact list on the XMPP
+ * server, with their names, asking for their presence) and take them off.
  */
 
 export const OMEMO_ID = "thunderbird-omemo@precisioncrab";
@@ -65,7 +67,7 @@ export function omemoClient(send = (id, message) => browser.runtime.sendMessage(
     preview: () => call({ command: "chatNames.preview" }),
     setMode: (jid, mode) => call({ command: "chatNames.setMode", jid, mode }),
     openOptions: (section = "contacts") => call({ command: "openOptions", section }),
-    /** Whether this OMEMO Pro adds chat contacts (0.3.3 and later); false for anything else. */
+    /** Whether this OMEMO add-on adds people to the chat list (OMEMO for Thunderbird 0.1.6, OMEMO Pro 0.3.4 and later). */
     async canAddContacts() {
       try {
         return (await call({ command: "chatContacts.hello" }))?.add === true;
@@ -74,6 +76,7 @@ export function omemoClient(send = (id, message) => browser.runtime.sendMessage(
       }
     },
     addContacts: (account, contacts) => call({ command: "chatContacts.add", account, contacts }),
+    removeContacts: (account, jids) => call({ command: "chatContacts.remove", account, jids }),
   };
 }
 

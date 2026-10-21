@@ -24,27 +24,28 @@ import { LINKS, openLink } from "../lib/links.js";
 import { readCard, label } from "../core/card.js";
 import { findDuplicates, suggestPeople } from "../core/duplicates.js";
 import { phoneFixes, proposeName } from "../core/fixes.js";
-import { chatState, prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
+import { prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
 import { applyChanges, undoEntry, addEntry } from "../core/history.js";
+import contacts, { allLabels } from "./views/contacts.js";
 import duplicates from "./views/duplicates.js";
 import phones from "./views/phones.js";
 import names from "./views/names.js";
-import addresses from "./views/chat-addresses.js";
 import chat from "./views/chat.js";
 import changesView from "./views/history.js";
 import about from "./views/about.js";
-import { editorPage, editorDetail } from "./card-editor.js";
+import { refreshOmemo } from "./omemo-state.js";
 
-const VIEWS = { duplicates, phones, names, addresses, chat, history: changesView, about };
+const VIEWS = { contacts, duplicates, phones, names, chat, history: changesView, about };
 
 // Pages that were renamed or merged, for old links.
-const VIEW_ALIASES = { chatContacts: "chat", fixes: "addresses" };
+const VIEW_ALIASES = { chatContacts: "chat", fixes: "chat", addresses: "chat" };
 
-const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null };
+// `collapsed`: the sidebar categories folded away.
+const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null, collapsed: [] };
 
 const state = {
-  view: "duplicates",
+  view: "contacts",
   loading: true,
   loadError: null,
   books: [],
@@ -60,21 +61,20 @@ const state = {
   phoneOff: new Set(),
   nameEdits: new Map(),
   nameOn: new Map(),
-  // Chat addresses: JMP.chat addresses checked or unchecked but not applied yet, the number picked per card, the tab, the filter.
-  chatStaged: new Map(),
-  chatNumber: new Map(),
-  chatTab: "phones",
-  chatFilter: "all",
   prefixOff: new Set(),
-  // The Chat page: the account shown, the "Who is this?" page ({ jid, name, search, book }), cards checked for Add to chat.
-  chat: { account: null, pick: null, addSel: new Set(), namedOpen: false },
+  // Chat addresses: the tab ("contacts" or "list"), the account whose chat list is shown,
+  // the "Who is this?" page ({ jid, name, search, book }), the contacts checked, the filter.
+  chat: { tab: "contacts", account: null, pick: null, sel: new Set(), namedOpen: false, filter: "all" },
   merge: null,
-  // Edit card: { id, name, ed } while a card is open in the editor (card-editor.js).
-  editor: null,
+  // The contact editor (contact-panel.js): edits per contact until saved, and a new contact being made.
+  drafts: new Map(),
+  newContact: null,
+  // All contacts: the label shown (null for all).
+  contactsFilter: null,
   omemo: { loading: false, status: null, result: null, error: null, canAdd: false },
 };
 
-const derived = { duplicates: [], phones: [], names: [], chat: [], prefix: [] };
+const derived = { duplicates: [], phones: [], names: [], prefix: [] };
 
 // Changes this tab makes fire address book events; the tab reloads once
 // when it's done instead of after every card.
@@ -87,6 +87,7 @@ const ctx = {
   render,
   select(key) {
     state.selected = key;
+    state.newContact = null;
     render();
   },
   setView,
@@ -109,9 +110,6 @@ function recompute() {
     .map((card) => ({ card, ...phoneFixes(card, { style: s.phoneStyle, country }) }))
     .filter((p) => p.fixes.length || p.skipped.length);
   derived.names = state.cards.map((card) => ({ card, proposal: proposeName(card) })).filter((n) => n.proposal);
-  derived.chat = state.cards
-    .filter((card) => card.phones.length)
-    .map((card) => ({ card, ...chatState(card, state.generated[card.id] ?? []) }));
   derived.prefix = state.cards.map((card) => ({ card, fixes: prefixFixes(card) })).filter((p) => p.fixes.length);
 }
 
@@ -129,16 +127,16 @@ async function reload() {
     .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => readCard(node, book.name)))
     .sort((a, b) => label(a).localeCompare(label(b)));
   const ids = new Set(state.cards.map((c) => c.id));
-  for (const map of [state.nameEdits, state.nameOn, state.chatStaged, state.chatNumber]) {
+  for (const map of [state.nameEdits, state.nameOn, state.drafts]) {
     for (const id of map.keys()) {
       if (!ids.has(id)) {
         map.delete(id);
       }
     }
   }
-  for (const id of state.chat.addSel) {
+  for (const id of state.chat.sel) {
     if (!ids.has(id)) {
-      state.chat.addSel.delete(id);
+      state.chat.sel.delete(id);
     }
   }
   if (state.merge && !state.merge.key.split("|").every((id) => ids.has(id))) {
@@ -333,7 +331,7 @@ function setView(view) {
   }
   state.view = view;
   state.selected = null;
-  state.editor = null;
+  state.newContact = null;
   state.chat.pick = null;
   state.merge = view === "duplicates" ? state.merge : null;
   history.replaceState(null, "", `#${view}`);
@@ -359,7 +357,11 @@ function menus() {
     {
       title: "View",
       items: [
-        view("duplicates"), view("phones"), view("names"), view("addresses"), view("chat"),
+        view("contacts"),
+        { separator: true },
+        view("duplicates"), view("phones"), view("names"),
+        { separator: true },
+        view("chat"),
         { separator: true },
         view("history"),
         { separator: true },
@@ -403,38 +405,63 @@ function renderMenu() {
   }
 }
 
+/** Folds a sidebar category away, or opens it; remembered. */
+function toggleCategory(id) {
+  const collapsed = new Set(state.settings.collapsed ?? []);
+  collapsed[collapsed.has(id) ? "delete" : "add"](id);
+  saveSettings({ collapsed: [...collapsed] });
+}
+
 function renderSidebar() {
+  const clickable = (props, onActivate) => ({
+    ...props,
+    role: "button",
+    tabindex: "0",
+    onClick: onActivate,
+    onKeydown: (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onActivate();
+      }
+    },
+  });
+  const countBadge = (count) => (count === null || count === undefined ? null : h("span", { class: `count${count ? " has" : ""}` }, String(count)));
   const item = (id) => {
     const v = VIEWS[id];
     const count = state.loading ? null : v.count(ctx);
-    return h("div", {
-      class: `sidebar-item${state.view === id ? " active" : ""}`,
-      role: "button",
-      tabindex: "0",
-      onClick: () => setView(id),
-      onKeydown: (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setView(id);
-        }
-      },
-    },
+    const active = state.view === id && (id !== "contacts" || !state.contactsFilter);
+    return h("div", clickable({ class: `sidebar-item${active ? " active" : ""}` }, () => {
+      state.contactsFilter = null;
+      setView(id);
+    }),
     h("span", { class: "sidebar-dot", style: { background: v.dot } }),
     h("span", { class: "name" }, v.title),
-    count === null || count === undefined ? null : h("span", { class: `count${count ? " has" : ""}` }, String(count)));
+    countBadge(count));
   };
+  const labelItem = ([text, count]) => h("div", clickable({ class: `sidebar-item sidebar-sub${state.view === "contacts" && state.contactsFilter === text ? " active" : ""}`, title: `Contacts with the label ${text}` }, () => {
+    setView("contacts");
+    state.contactsFilter = text;
+    render();
+  }),
+  h("span", { class: "sidebar-dot", style: { background: "transparent", border: "1px solid var(--text-faint)" } }),
+  h("span", { class: "name" }, text),
+  countBadge(count));
+  const collapsed = new Set(state.settings.collapsed ?? []);
+  const category = (id, title, children) => [
+    h("div", clickable({ class: "sidebar-section-label sidebar-toggle", "aria-expanded": String(!collapsed.has(id)), title: collapsed.has(id) ? `Show ${title}` : `Fold ${title} away` }, () => toggleCategory(id)),
+      h("span", { class: "chevron", "aria-hidden": "true" }, collapsed.has(id) ? "\u25b8" : "\u25be"),
+      title),
+    collapsed.has(id) ? null : children,
+  ];
   const excluded = new Set(state.settings.excludedBooks);
   fill(document.getElementById("sidebar"),
     h("div", { class: "sidebar-header" }, h("img", { src: "../../icons/icon.svg", alt: "" }), "Contacts Cleanup"),
     h("div", { class: "sidebar-list", "data-scroll": "sidebar" },
-      h("div", { class: "sidebar-section-label" }, "Clean up"),
-      item("duplicates"), item("phones"), item("names"), item("addresses"),
-      h("div", { class: "sidebar-section-label" }, "Chat"),
-      item("chat"), omemoItem(),
-      h("div", { class: "sidebar-section-label" }, "More"),
-      item("history"), item("about"),
-      h("div", { class: "sidebar-section-label" }, "Address books"),
-      state.books.map((book) => {
+      category("contacts", "Contacts", [item("contacts"), state.loading ? null : allLabels(state.cards).map(labelItem)]),
+      category("cleanup", "Clean up", [item("duplicates"), item("phones"), item("names")]),
+      category("chat", "Chat", [item("chat"), omemoItem()]),
+      category("more", "More", [item("history"), item("about")]),
+      category("books", "Address books", state.books.map((book) => {
         const locked = book.readOnly || book.remote;
         return h("label", { class: `sidebar-book${locked ? " disabled" : ""}`, title: locked ? "Read-only: left alone" : "Include this address book" },
           h("input", {
@@ -447,8 +474,8 @@ function renderSidebar() {
           }),
           h("span", { class: "name" }, book.name),
           h("span", { class: "count" }, locked ? "read-only" : String(book.contacts.length)));
-      })),
-    h("div", { class: "sidebar-footer" }, "Nothing changes until you apply it, and every change can be undone."));
+      }))),
+    h("div", { class: "sidebar-footer" }, "Nothing changes until you apply or save it, and every change can be undone."));
 }
 
 /**
@@ -459,7 +486,7 @@ function renderSidebar() {
 function omemoItem() {
   const item = {
     none: { text: "Get OMEMO for Thunderbird", icon: "\u2197", title: "End-to-end encrypted XMPP chat in Thunderbird. Opens its page in your web browser.", go: () => openLink(LINKS.omemo) },
-    free: { text: "Get OMEMO Pro", icon: "\u2197", title: "Audio calls in Thunderbird with JMP.chat, Cheogram and other XMPP apps. Opens its page in your web browser.", go: () => openLink(LINKS.omemoPro) },
+    free: { text: "Get OMEMO Pro", icon: "\u2197", title: "OMEMO Pro adds audio calls in Thunderbird, with JMP.chat numbers, Cheogram and other XMPP apps. Opens its page in your web browser.", go: () => openLink(LINKS.omemoPro) },
     pro: { text: "OMEMO settings", icon: "\u2699", title: "Open OMEMO Pro for Thunderbird's settings", go: () => ctx.omemo.openOptions("settings").catch(() => {}) },
   }[omemoTier(state.omemo.status)];
   const go = item.go;
@@ -495,8 +522,6 @@ function renderMain() {
     body = h("div", { class: "empty-state" }, "Reading the address books…");
   } else if (state.loadError) {
     body = h("div", { class: "empty-state" }, h("div", { class: "big" }, "Couldn't read the address books."), state.loadError);
-  } else if (state.editor) {
-    body = editorPage(ctx);
   } else {
     body = view.main(ctx);
   }
@@ -510,7 +535,7 @@ function renderMain() {
 
 function renderRail() {
   const view = VIEWS[state.view];
-  fill(document.getElementById("rail"), h("div", { class: "detail-panel", "data-scroll": "detail" }, state.loading ? null : state.editor ? editorDetail(ctx) : view.detail(ctx)));
+  fill(document.getElementById("rail"), h("div", { class: "detail-panel", "data-scroll": "detail" }, state.loading ? null : view.detail(ctx)));
 }
 
 /** Renders everything, keeping focus, text selection and scroll positions. */
@@ -607,10 +632,8 @@ window.addEventListener("hashchange", () => {
   });
   await reload();
   VIEWS[state.view].onShow?.(ctx);
-  // Whether OMEMO for Thunderbird answers, for the Chat pages and the sidebar.
-  if (!state.omemo.status) {
-    const status = await ctx.omemo.status();
-    state.omemo.status ??= status;
-    render();
+  // What OMEMO for Thunderbird says (whether it's there, the chat list), for the sidebar, the Chat page and the editor's In chat list.
+  if (!state.omemo.status && !state.omemo.loading) {
+    await refreshOmemo(ctx);
   }
 })();

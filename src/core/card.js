@@ -51,6 +51,7 @@ export const isMobile = (prop) => typesOf(prop).some((t) => t === "cell" || t ==
  *               Thunderbird's card editor refuses) or "x-jabber" (older
  *               apps' X-JABBER line, which Thunderbird doesn't show)
  *   hasPhoto
+ *   labels      the card's labels (CATEGORIES)
  */
 export function readCard(node, bookName = "") {
   const vcard = parseVCard(node.vCard);
@@ -100,6 +101,8 @@ export function readCard(node, bookName = "") {
     emails,
     chat,
     hasPhoto: getAll(vcard, "PHOTO").length > 0,
+    // Labels (CATEGORIES), split at unescaped commas.
+    labels: [...new Set(getAll(vcard, "CATEGORIES").flatMap((p) => p.value.split(/(?<!\\),/).map(unescapeText)).map((s) => s.trim()).filter(Boolean))],
   };
 }
 

@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { card } from "./helpers.js";
-import { phoneOfChatAddress, linkFor, linkToCard, newCardFor, splitName, notInChat } from "../src/core/chat-list.js";
+import { phoneOfChatAddress, linkFor, linkToCard, newCardFor, splitName, chatRows } from "../src/core/chat-list.js";
 import { parseVCard, getAll, first } from "../src/core/vcard.js";
 import { readCard } from "../src/core/card.js";
 
@@ -44,21 +44,26 @@ test("a new card for a chat contact gets the name, split into first and last, an
   assert.deepEqual(getAll(chat, "IMPP").map((p) => p.value), ["xmpp:friend@example.org"]);
 });
 
-test("cards not in a chat list: their own chat address first, else their number at the gateway, mobile first", () => {
+test("Chat addresses rows: own chat address first, else the JMP.chat address of the first number, mobile first; in the chat list by address or number", () => {
   const cards = [
     card(["FN:In By Number", "TEL;TYPE=cell:555-666-7777"], { id: "a" }),
     card(["FN:In By Address", "IMPP:xmpp:friend@example.org"], { id: "b" }),
-    card(["FN:In By Quicksy", "TEL;TYPE=cell:+1 555 111 2222"], { id: "c" }),
     card(["FN:Has Address", "TEL;TYPE=cell:555 333 4444", "IMPP:xmpp:+15553334444@cheogram.com", "IMPP:xmpp:has@example.org"], { id: "d" }),
     card(["FN:Home And Mobile", "TEL;TYPE=home:555 444 0000", "TEL;TYPE=cell:555 444 1111"], { id: "e" }),
     card(["FN:Email Only", "EMAIL:email.only@example.org"], { id: "f" }),
     card(["FN:No Country", "TEL;TYPE=cell:12345"], { id: "g" }),
   ];
-  const chatList = ["+15556667777@cheogram.com", "Friend@Example.org", "+15551112222@quicksy.im"];
-  const out = notInChat(cards, chatList, "cheogram.com");
-  assert.deepEqual(out.map((o) => [o.card.id, o.jid, o.via]), [
-    ["d", "has@example.org", "chat"],
-    ["e", "+15554441111@cheogram.com", "phone"],
+  const chatList = new Set(["+15556667777@quicksy.im", "friend@example.org"]);
+  const has = (jid) => chatList.has(jid) || [...chatList].some((c) => phoneOfChatAddress(c) && phoneOfChatAddress(c) === phoneOfChatAddress(jid));
+  const rows = chatRows(cards, { has, gateway: "cheogram.com" });
+  assert.deepEqual(rows.map((r) => [r.card.id, r.address, r.inChat]), [
+    ["a", "+15556667777@cheogram.com", true],
+    ["b", "friend@example.org", true],
+    ["d", "has@example.org", false],
+    ["e", "+15554441111@cheogram.com", false],
+    ["g", null, false],
   ]);
-  assert.equal(out[1].number, "555 444 1111");
+  assert.equal(rows[3].number, "555 444 1111");
+  // Without a chat list, nobody is known to be in it or not.
+  assert.deepEqual(chatRows(cards, { gateway: "cheogram.com" }).map((r) => r.inChat), [null, null, null, null, null]);
 });

@@ -19,7 +19,7 @@ import { h, plural } from "../dom.js";
 import { toolbar, row, avatar, cardSummary, emptyState, matches, tag } from "../parts.js";
 import { label } from "../../core/card.js";
 import { mergeOptions, mergeVCard, pairKey, groupLinks, MULTI, ADD_TYPES } from "../../core/duplicates.js";
-import { TYPE_NAMES, ADD_LABELS, PLACEHOLDERS, addressEditor } from "../card-editor.js";
+import { TYPE_NAMES, ADD_LABELS, PLACEHOLDERS, addressEditor } from "../merge-fields.js";
 
 const groupKey = (group) => group.cards.map((c) => c.id).sort().join("|");
 

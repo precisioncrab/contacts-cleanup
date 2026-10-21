@@ -3,36 +3,37 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Chat: Thunderbird's chat list, seen from the address book. Only OMEMO
- * for Thunderbird can reach Thunderbird's chat, so the list comes from it
- * (cross-add-on messaging, src/lib/omemo.js); this page does the address
- * book side:
- *   - chat contacts the address book can't name, each with Add to a card
- *     and New card (the "Who is this?" page), so OMEMO names them;
- *   - the setting that names chat contacts, and the ones it named;
- *   - cards that aren't in the chat list yet, with Add to chat (OMEMO Pro
- *     0.3.3 and later puts them on the account's contact list).
- * Without OMEMO for Thunderbird, the page says what it would do and where
- * to get it.
+ * Chat addresses: the one Chat page, in two tabs.
+ *   Contacts   every contact with a phone number or chat address (in the
+ *              checked address books): their chat address, or the JMP.chat
+ *              address their number makes, and whether they're in the chat
+ *              list. Check them (or Select all) to add JMP.chat addresses to
+ *              their cards or add them to the chat list; chat addresses
+ *              Thunderbird can't use are fixed from here too. The selected
+ *              contact's editor is in the right-hand panel.
+ *   Chat list  Thunderbird's chat list, through OMEMO for Thunderbird: the
+ *              names setting, and the chat contacts no card has, each with
+ *              Add to a card and New card (the "Who is this?" page).
+ * Everything here is free; only calls are OMEMO Pro.
  */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, avatar, cardSummary, change, help, tag, pendingBar, selectAll, matches } from "../parts.js";
-import { openEditor } from "../card-editor.js";
+import { toolbar, row, avatar, change, help, tag, emptyState, selectAll, matches } from "../parts.js";
+import { contactPanel } from "../contact-panel.js";
 import { label } from "../../core/card.js";
-import { normalizeGateway, DEFAULT_GATEWAY } from "../../core/chat.js";
-import { linkFor, linkToCard, newCardFor, notInChat } from "../../core/chat-list.js";
+import { addChatAddress, applyPrefixFixes, normalizeGateway, DEFAULT_GATEWAY } from "../../core/chat.js";
+import { linkFor, linkToCard, newCardFor, chatRows } from "../../core/chat-list.js";
 import { MODES, namesRow, omemoTier, STATUS_ORDER } from "../../lib/omemo.js";
+import { refreshOmemo, refreshOmemoSoon, currentAccount, chatListHas, changeChatList } from "../omemo-state.js";
 import { LINKS, openLink } from "../../lib/links.js";
 
 export const CHAT_HELP = [
-  ["Chat list", "The people in Thunderbird's chat (Chat > Contacts) for one XMPP account. It's the contact list your XMPP server keeps for that account, so your other chat apps on it have the same list."],
-  ["Names from your address book", "A chat contact shows its address, like +15551234567@cheogram.com, until it has a name. OMEMO for Thunderbird gives it the name of the card with that phone number (for a JMP.chat or Quicksy address) or that chat address. A name a chat contact already has is kept."],
-  ["In Thunderbird only, or also on the server", "Thunderbird only: the names show in Thunderbird's chat list, nowhere else. Also on the server: they're saved in your account's contact list, so your other chat apps (Cheogram, Conversations) show them too."],
-  ["Add to chat (OMEMO Pro)", "Puts a person from your address book on your chat list, so you can text and call them from Thunderbird: their chat address, or their phone number through JMP.chat (texts and calls to a phone number, for an XMPP account registered with JMP.chat)."],
+  ["Chat address on a card", "Saved with the contact, like an email address. It goes wherever the address book syncs (your CardDAV server, then your phone), where chat apps like Conversations and Cheogram can show the card's name and photo for it. On its own it doesn't put anyone on your chat list."],
+  ["JMP.chat address", "A phone number at cheogram.com, like +15551234567@cheogram.com. With an XMPP account registered with JMP.chat (or another Cheogram gateway), texts and calls to it reach that phone number."],
+  ["Chat list", "The people in Thunderbird's chat (Chat > Contacts) for one XMPP account: the contact list your XMPP server keeps for it, so your other chat apps on that account have the same list. Adding someone asks for their online status; JMP.chat numbers say yes by themselves."],
+  ["Names from your address book", "A chat contact shows its address until it has a name. OMEMO for Thunderbird gives it the name of the card with that phone number (for a JMP.chat or Quicksy address) or that chat address. Thunderbird only: the names show in Thunderbird. Also on the server: your other chat apps show them too."],
 ];
 
-const message = (e) => e?.message ?? String(e);
 const gatewayOf = (ctx) => normalizeGateway(ctx.state.settings.gateway) ?? DEFAULT_GATEWAY;
 
 /** A chat address as people read it: a JMP.chat or Quicksy address as its number. */
@@ -51,40 +52,6 @@ function jidMatches(jid, query) {
   return jid.toLowerCase().includes(q) || (digits.length >= 3 && jid.replace(/\D/g, "").includes(digits));
 }
 
-let refreshTimer = null;
-
-/** Asks OMEMO for Thunderbird whether it's there, for the chat list, and (Pro) whether it adds contacts. */
-async function refresh(ctx) {
-  const omemo = ctx.state.omemo;
-  omemo.loading = true;
-  omemo.error = null;
-  ctx.render();
-  const status = await ctx.omemo.status();
-  omemo.status = status;
-  omemo.result = null;
-  omemo.canAdd = false;
-  if (status.installed) {
-    try {
-      omemo.result = await ctx.omemo.preview();
-    } catch (e) {
-      omemo.error = message(e);
-    }
-    omemo.canAdd = omemoTier(status) === "pro" && await ctx.omemo.canAddContacts();
-  }
-  omemo.loading = false;
-  ctx.render();
-}
-
-/** Asks again in a moment: OMEMO names chat contacts 3 seconds after a card changes, and a new chat contact arrives from the server. */
-function refreshSoon(ctx, wait = 4000) {
-  clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(() => {
-    if (ctx.state.view === "chat" && !ctx.state.omemo.loading && ctx.state.omemo.status?.installed) {
-      refresh(ctx);
-    }
-  }, wait);
-}
-
 async function setMode(ctx, jid, mode) {
   const omemo = ctx.state.omemo;
   omemo.loading = true;
@@ -93,20 +60,184 @@ async function setMode(ctx, jid, mode) {
     omemo.result = await ctx.omemo.setMode(jid, mode);
     omemo.error = null;
   } catch (e) {
-    omemo.error = message(e);
+    omemo.error = e?.message ?? String(e);
   }
   omemo.loading = false;
   ctx.render();
 }
 
-/** The account shown: the one picked, else the first. */
-function currentAccount(ctx) {
-  const accounts = ctx.state.omemo.result?.accounts ?? [];
-  return accounts.find((a) => a.jid === ctx.state.chat.account) ?? accounts[0] ?? null;
-}
-
 const unnamedOf = (account) => account.contacts.filter((c) => c.status === "unmatched" || c.status === "ambiguous");
 const pendingOf = (account) => account.contacts.filter((c) => (c.status === "set" || c.status === "update") && !c.done);
+
+/* ---------- Contacts tab ---------- */
+
+const FILTERS = [
+  ["all", "All"],
+  ["none", "Without a chat address"],
+  ["notInChat", "Not in the chat list"],
+  ["fix", "Chat addresses to fix"],
+];
+
+function contactRows(ctx) {
+  const fixIds = new Set(ctx.derived.prefix.map((p) => p.card.id));
+  const filter = ctx.state.chat.filter;
+  return chatRows(ctx.state.cards, { has: chatListHas(ctx), gateway: gatewayOf(ctx) })
+    .map((r) => ({ ...r, fix: fixIds.has(r.card.id) }))
+    .filter((r) => matches(r.card, ctx.state.search)
+      && (filter === "all"
+        || (filter === "none" && !r.addresses.length)
+        || (filter === "notInChat" && r.inChat === false)
+        || (filter === "fix" && r.fix)));
+}
+
+async function fixAll(ctx) {
+  const rows = ctx.derived.prefix;
+  await ctx.apply(`Chat address fixes: ${plural(rows.length, "card", "cards")}`,
+    rows.map((p) => ({ type: "update", id: p.card.id, vCard: applyPrefixFixes(p.card.vCard, p.fixes), label: label(p.card) })));
+}
+
+/** Checked contacts without a chat address get their JMP.chat address on their card. */
+async function addJmp(ctx, rows) {
+  const todo = rows.filter((r) => !r.addresses.length && r.jmp);
+  const entry = await ctx.apply(`JMP.chat addresses: ${plural(todo.length, "card", "cards")}`,
+    todo.map((r) => ({ type: "update", id: r.card.id, vCard: addChatAddress(r.card.vCard, r.jmp), label: label(r.card) })),
+    { generated: { added: todo.map((r) => [r.card.id, r.jmp]), removed: [] } });
+  if (entry) {
+    for (const r of todo) {
+      ctx.state.chat.sel.delete(r.card.id);
+    }
+    ctx.render();
+  }
+}
+
+/** Checked contacts not in the chat list go on it; a card without a chat address gets the JMP.chat address it's added with. */
+async function addToChatList(ctx, rows) {
+  const account = currentAccount(ctx);
+  const todo = rows.filter((r) => r.inChat === false && r.address);
+  const cards = todo.filter((r) => !r.addresses.length);
+  const go = await ctx.confirm({
+    title: `Add ${plural(todo.length, "person", "people")} to the chat list?`,
+    body: [
+      h("p", {}, `${todo.length === 1 ? `${label(todo[0].card)} goes` : "They go"} on the chat list of ${account.jid}, with the ${todo.length === 1 ? "name from the card" : "names from their cards"}. That list is kept on your XMPP server, so your other chat apps on that account show them too.`),
+      cards.length ? h("p", {}, `${plural(cards.length, "card has", "cards have")} no chat address yet, so ${cards.length === 1 ? "it gets" : "they get"} the JMP.chat address ${cards.length === 1 ? "it's" : "they're"} added with (Undo takes it off again).`) : null,
+      h("p", {}, "Each one is asked to share their online status; JMP.chat numbers say yes by themselves. To take someone off later: uncheck In chat list in their editor, or right-click them in Thunderbird's chat list, Delete."),
+    ],
+    ok: todo.length === 1 ? "Add to chat list" : `Add ${todo.length} to chat list`,
+  });
+  if (!go) {
+    return;
+  }
+  if (cards.length) {
+    const entry = await ctx.apply(`JMP.chat addresses: ${plural(cards.length, "card", "cards")}`,
+      cards.map((r) => ({ type: "update", id: r.card.id, vCard: addChatAddress(r.card.vCard, r.jmp), label: label(r.card) })),
+      { generated: { added: cards.map((r) => [r.card.id, r.jmp]), removed: [] } });
+    if (!entry) {
+      return;
+    }
+  }
+  ctx.state.busy = { text: "Adding to the chat list…" };
+  ctx.render();
+  const line = await changeChatList(ctx, { add: todo.map((r) => ({ jid: r.address, name: label(r.card) })) });
+  ctx.state.busy = null;
+  for (const r of todo) {
+    ctx.state.chat.sel.delete(r.card.id);
+  }
+  ctx.render();
+  ctx.toast(line);
+}
+
+function contactsTab(ctx) {
+  const omemo = ctx.state.omemo;
+  const tier = omemoTier(omemo.status);
+  const rows = contactRows(ctx);
+  const sel = ctx.state.chat.sel;
+  const fixes = ctx.derived.prefix.length;
+  const canChatList = Boolean(chatListHas(ctx) && omemo.canAdd);
+  return [
+    fixes
+      ? h("div", { class: "omemo-banner" },
+        h("span", {}, `${plural(fixes, "contact has a chat address", "contacts have chat addresses")} Thunderbird's card editor can't use (no xmpp: in front, or an old X-JABBER field).`),
+        h("button", { class: "small", onClick: () => {
+          ctx.state.chat.filter = "fix";
+          ctx.render();
+        } }, "Show"),
+        h("button", { class: "primary small", disabled: Boolean(ctx.state.busy), onClick: () => fixAll(ctx) }, `Fix ${fixes === 1 ? "it" : `all ${fixes}`}`))
+      : null,
+    tier === "none" && omemo.status
+      ? h("div", { class: "omemo-banner" },
+        h("span", {}, "To see who's in Thunderbird's chat list, add people to it and chat end-to-end encrypted, add OMEMO for Thunderbird (free)."),
+        h("button", { class: "primary small", onClick: () => openLink(LINKS.omemo) }, "Get OMEMO for Thunderbird"))
+      : null,
+    h("div", { class: "toolbar-filters" },
+      h("label", {}, "Show",
+        h("select", { onChange: (e) => {
+          ctx.state.chat.filter = e.target.value;
+          ctx.render();
+        } }, FILTERS.filter(([value]) => value !== "notInChat" || canChatList).map(([value, text]) => h("option", { value, selected: ctx.state.chat.filter === value }, text)))),
+      h("label", {}, "JMP.chat gateway",
+        h("input", {
+          type: "text",
+          id: "gateway",
+          class: normalizeGateway(ctx.state.settings.gateway) ? "" : "invalid",
+          style: { width: "130px" },
+          value: ctx.state.settings.gateway,
+          title: "JMP.chat's gateway is cheogram.com. Another Cheogram gateway's domain can go here.",
+          onChange: (e) => ctx.saveSettings({ gateway: e.target.value.trim() || DEFAULT_GATEWAY }),
+        })),
+      h("span", { class: "right" }, selectAll("Select all", rows.map((r) => sel.has(r.card.id)), (value) => {
+        for (const r of rows) {
+          sel[value ? "add" : "delete"](r.card.id);
+        }
+        ctx.render();
+      }))),
+    h("div", { class: "list", "data-scroll": "list" },
+      rows.length === 0
+        ? emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts with a phone number or chat address here.", "")
+        : rows.map((r) => row(ctx, {
+          key: r.card.id,
+          muted: !r.addresses.length && !r.jmp,
+          check: { checked: sel.has(r.card.id), title: "Select", onChange: (value) => {
+            sel[value ? "add" : "delete"](r.card.id);
+            ctx.render();
+          } },
+          lead: avatar(r.card),
+          title: label(r.card),
+          meta: [
+            r.addresses.length
+              ? h("span", {}, r.addresses.join(", "))
+              : r.jmp
+                ? [change(r.number, r.jmp, false), tag("no chat address yet", "plain")]
+                : h("span", {}, `${r.number}: no country code, so no JMP.chat address (see Phone numbers)`),
+            r.fix ? tag("to fix", "warn") : null,
+            r.inChat ? tag("in chat list") : null,
+          ],
+        }))),
+    selectedBar(ctx, canChatList),
+  ];
+}
+
+/** Under the list while contacts are checked: what can be done with them. */
+function selectedBar(ctx, canChatList) {
+  const rows = contactRows(ctx).filter((r) => ctx.state.chat.sel.has(r.card.id));
+  if (!rows.length) {
+    return null;
+  }
+  const jmp = rows.filter((r) => !r.addresses.length && r.jmp).length;
+  const chat = rows.filter((r) => r.inChat === false && r.address).length;
+  const busy = Boolean(ctx.state.busy);
+  return h("div", { class: "pending-bar", role: "status" },
+    h("span", {}, `${plural(rows.length, "contact", "contacts")} checked.`),
+    h("button", { disabled: busy, onClick: () => {
+      ctx.state.chat.sel.clear();
+      ctx.render();
+    } }, "Clear"),
+    h("button", { class: "primary", disabled: busy || !jmp, title: jmp ? "" : "Every checked contact has a chat address already", onClick: () => addJmp(ctx, rows) },
+      jmp ? `Add JMP.chat address${jmp === 1 ? "" : `es (${jmp})`}` : "Add JMP.chat addresses"),
+    canChatList
+      ? h("button", { class: "primary", disabled: busy || !chat, title: chat ? "" : "Every checked contact is in the chat list already", onClick: () => addToChatList(ctx, rows) },
+        chat ? `Add to chat list${chat === 1 ? "" : ` (${chat})`}` : "Add to chat list")
+      : null);
+}
 
 /* ---------- Who is this? (Add to a card, New card) ---------- */
 
@@ -133,7 +264,7 @@ async function createCard(ctx, jid, name, bookId) {
   if (entry) {
     ctx.state.chat.pick = null;
     await ctx.saveSettings({ newCardBook: bookId });
-    refreshSoon(ctx);
+    refreshOmemoSoon(ctx);
   }
 }
 
@@ -147,7 +278,7 @@ async function addToCard(ctx, jid, card) {
   if (entry) {
     ctx.state.chat.pick = null;
     ctx.render();
-    refreshSoon(ctx);
+    refreshOmemoSoon(ctx);
   }
 }
 
@@ -175,7 +306,7 @@ function pickPage(ctx) {
         ? `Thunderbird's chat list shows ${pick.jid} because no card has the number ${link.text}. Make a card for this person, or add the number to their card (as a mobile number). The chat list then shows their name.`
         : `Thunderbird's chat list shows ${pick.jid} because no card has this chat address. Make a card for this person, or add the address to their card. The chat list then shows their name.`),
       account && account.mode === "off"
-        ? h("div", { class: "notice warn" }, `Names are off for ${account.jid}. To see the name in Thunderbird, set "Names from your address book" on the Chat page.`)
+        ? h("div", { class: "notice warn" }, `Names are off for ${account.jid}. To see the name in Thunderbird, set "Names from your address book" on the Chat list tab.`)
         : null,
 
       h("div", { class: "page-section" },
@@ -223,15 +354,15 @@ function pickPage(ctx) {
   ];
 }
 
-/* ---------- The Chat page ---------- */
+/* ---------- Chat list tab ---------- */
 
 function notInstalled(ctx) {
   return [
-    h("p", {}, "Thunderbird's chat list shows a contact's address, like +15551234567@cheogram.com, until it has a name. With OMEMO for Thunderbird (free), this page names your XMPP chat contacts from your address book, and lets you put the ones it can't name on a card. It also encrypts your chats end to end with OMEMO, the encryption Conversations, Cheogram, Monal and Gajim use."),
+    h("p", {}, "Thunderbird's chat list shows a contact's address, like +15551234567@cheogram.com, until it has a name. With OMEMO for Thunderbird (free), this tab names your XMPP chat contacts from your address book, and lets you put the ones it can't name on a card. It also encrypts your chats end to end with OMEMO, the encryption Conversations, Cheogram, Monal and Gajim use."),
     h("p", {}, "It isn't on addons.thunderbird.net: it needs access to Thunderbird's chat, which add-ons listed there can't have. It's free and open source (MPL-2.0), installed from its own page."),
     h("div", { class: "detail-actions", style: { maxWidth: "460px" } },
       h("button", { class: "primary", onClick: () => openLink(LINKS.omemo) }, "Get OMEMO for Thunderbird"),
-      h("button", { onClick: () => refresh(ctx) }, "Check again")),
+      h("button", { onClick: () => refreshOmemo(ctx) }, "Check again")),
     h("div", { class: "notice" }, "Installed already? Contacts Cleanup needs OMEMO for Thunderbird 0.1.5 or later, turned on in Add-ons and Themes."),
   ];
 }
@@ -263,7 +394,7 @@ function accountBox(ctx, account) {
 function unnamedSection(ctx, account) {
   const rows = unnamedOf(account).filter((c) => jidMatches(c.jid, ctx.state.search)).sort((a, b) => a.jid.localeCompare(b.jid));
   return [
-    h("div", { class: "list-heading" }, `Not named: ${rows.length}`),
+    h("div", { class: "list-heading" }, `No name yet: ${rows.length}`),
     rows.length === 0
       ? h("p", { class: "hint" }, ctx.state.search ? "None match the search." : "Every chat contact on this account is in your address book.")
       : [
@@ -310,124 +441,52 @@ function namedSection(ctx, account) {
   }))));
 }
 
-/** The cards not in the chat list, for Add to chat. */
-function addable(ctx, account) {
-  return notInChat(ctx.state.cards, account.contacts.map((c) => c.jid), gatewayOf(ctx)).filter((item) => matches(item.card, ctx.state.search));
-}
-
-async function addToChat(ctx, account, items) {
-  const n = items.length;
-  const go = await ctx.confirm({
-    title: `Add ${plural(n, "person", "people")} to your chat list?`,
-    body: [
-      h("p", {}, `${n === 1 ? `${label(items[0].card)} goes` : `They go`} on the contact list of ${account.jid} on your XMPP server, with the ${n === 1 ? "name from the card" : "names from their cards"}. ${n === 1 ? "It shows" : "They show"} in Thunderbird's chat list and in your other chat apps on that account.`),
-      h("p", {}, "Each one is asked to share their online status. JMP.chat numbers say yes by themselves."),
-      h("p", {}, "To take one off later: right-click it in Thunderbird's chat list, then Delete."),
-    ],
-    ok: n === 1 ? "Add to chat" : `Add ${n} to chat`,
-  });
-  if (!go) {
-    return;
-  }
-  ctx.state.busy = { text: "Adding to chat…" };
-  ctx.render();
-  let result;
-  try {
-    result = await ctx.omemo.addContacts(account.jid, items.map((item) => ({ jid: item.jid, name: label(item.card) })));
-  } catch (e) {
-    result = { added: [], failed: items.map((item) => ({ jid: item.jid, error: message(e) })) };
-  }
-  ctx.state.busy = null;
-  const added = result?.added?.length ?? 0;
-  const failed = result?.failed ?? [];
-  for (const item of items) {
-    ctx.state.chat.addSel.delete(item.card.id);
-  }
-  ctx.render();
-  ctx.toast(failed.length
-    ? `Added ${added} to chat. ${plural(failed.length, "couldn't be added", "couldn't be added")}: ${failed.map((f) => `${f.jid} (${f.error})`).join(", ")}`
-    : `Added ${plural(added, "person", "people")} to chat on ${account.jid}.`, { error: failed.length > 0 });
-  refreshSoon(ctx, 2000);
-}
-
-function addSection(ctx, account) {
-  const tier = omemoTier(ctx.state.omemo.status);
-  const items = addable(ctx, account);
-  const canAdd = tier === "pro" && ctx.state.omemo.canAdd;
-  const sel = ctx.state.chat.addSel;
-  const heading = h("div", { class: "list-heading" }, `Not in your chat list yet: ${items.length}`);
-  if (!items.length) {
-    return [heading, h("p", { class: "hint" }, ctx.state.search ? "None match the search." : "Everyone in your address book with a phone number or chat address is in your chat list.")];
-  }
-  const rowFor = (item) => row(ctx, {
-    key: item.card.id,
-    check: canAdd ? {
-      checked: sel.has(item.card.id),
-      title: "Add to chat",
-      onChange: (value) => {
-        sel[value ? "add" : "delete"](item.card.id);
-        ctx.render();
-      },
-    } : null,
-    lead: avatar(item.card),
-    title: label(item.card),
-    meta: item.via === "phone" ? [change(item.number, item.jid, false), tag("JMP.chat", "plain")] : [h("span", {}, item.jid)],
-  });
-  if (!canAdd) {
-    return [
-      heading,
-      tier === "pro"
-        ? h("div", { class: "notice" }, "Your OMEMO Pro is older than 0.3.3, the version that adds people to your chat list. Update it: Add-ons and Themes > gear > Check for Updates.")
-        : h("div", { class: "notice pitch" },
-          h("span", {}, "Text and call these people from Thunderbird: OMEMO Pro for Thunderbird adds them to your chat list (their chat address, or their number through JMP.chat), and adds audio calls. $10, one time."),
-          h("button", { class: "primary small", onClick: () => openLink(LINKS.omemoPro) }, "Get OMEMO Pro")),
-      h("div", { class: "chat-list" }, items.slice(0, 5).map(rowFor)),
-      items.length > 5 ? h("p", { class: "hint" }, `and ${items.length - 5} more.`) : null,
+function chatListTab(ctx) {
+  const omemo = ctx.state.omemo;
+  const tier = omemoTier(omemo.status);
+  const account = currentAccount(ctx);
+  let body;
+  if (!omemo.status || (omemo.loading && !omemo.result && tier !== "none")) {
+    body = h("p", {}, "Asking OMEMO for Thunderbird…");
+  } else if (tier === "none") {
+    body = notInstalled(ctx);
+  } else if (!account) {
+    body = h("div", { class: "notice" }, omemo.error
+      ? `OMEMO for Thunderbird answered with an error: ${omemo.error}`
+      : "No XMPP account is connected right now. Connect one in Thunderbird's chat, then Refresh.");
+  } else {
+    body = [
+      accountBox(ctx, account),
+      omemo.error ? h("div", { class: "notice warn" }, `OMEMO for Thunderbird answered with an error: ${omemo.error}`) : null,
+      unnamedSection(ctx, account),
+      namedSection(ctx, account),
     ];
   }
-  return [
-    heading,
-    h("div", { class: "toolbar-filters chat-filters" },
-      h("label", {}, "JMP.chat gateway",
-        h("input", {
-          type: "text",
-          id: "gateway",
-          class: normalizeGateway(ctx.state.settings.gateway) ? "" : "invalid",
-          style: { width: "130px" },
-          value: ctx.state.settings.gateway,
-          title: "JMP.chat's gateway is cheogram.com. Another Cheogram gateway's domain can go here.",
-          onChange: (e) => ctx.saveSettings({ gateway: e.target.value.trim() || DEFAULT_GATEWAY }),
-        })),
-      h("span", { class: "right" }, selectAll("Select all", items.map((item) => sel.has(item.card.id)), (value) => {
-        for (const item of items) {
-          sel[value ? "add" : "delete"](item.card.id);
-        }
-        ctx.render();
-      }))),
-    h("div", { class: "chat-list" }, items.map(rowFor)),
-  ];
+  return h("div", { class: "page", "data-scroll": "page" }, body);
 }
+
+/* ---------- The page ---------- */
 
 export default {
   id: "chat",
-  title: "Chat",
+  title: "Chat addresses",
   dot: "#20a39e",
 
-  // The chat contacts that need a card.
+  // The chat addresses to fix, and the chat contacts that need a card.
   count: (ctx) => {
     const account = currentAccount(ctx);
-    return account ? unnamedOf(account).length : null;
+    return ctx.derived.prefix.length + (account ? unnamedOf(account).length : 0) || null;
   },
 
-  // Asks afresh each time the page is shown, so it never shows an old answer.
+  // Asks OMEMO afresh each time the page is shown, so it never shows an old answer.
   onShow(ctx) {
     if (!ctx.state.omemo.loading) {
-      refresh(ctx);
+      refreshOmemo(ctx);
     }
   },
 
   onCardsChanged(ctx) {
-    refreshSoon(ctx);
+    refreshOmemoSoon(ctx);
   },
 
   main(ctx) {
@@ -438,67 +497,38 @@ export default {
     const tier = omemoTier(omemo.status);
     const accounts = omemo.result?.accounts ?? [];
     const account = currentAccount(ctx);
-    let body;
-    if (!omemo.status || (omemo.loading && !omemo.result && tier !== "none")) {
-      body = h("p", {}, "Asking OMEMO for Thunderbird…");
-    } else if (tier === "none") {
-      body = notInstalled(ctx);
-    } else if (!account) {
-      body = h("div", { class: "notice" }, omemo.error
-        ? `OMEMO for Thunderbird answered with an error: ${omemo.error}`
-        : "No XMPP account is connected right now. Connect one in Thunderbird's chat, then Refresh.");
-    } else {
-      body = [
-        accountBox(ctx, account),
-        omemo.error ? h("div", { class: "notice warn" }, `OMEMO for Thunderbird answered with an error: ${omemo.error}`) : null,
-        unnamedSection(ctx, account),
-        addSection(ctx, account),
-        namedSection(ctx, account),
-      ];
-    }
-    const selected = account && tier === "pro" && omemo.canAdd ? addable(ctx, account).filter((item) => ctx.state.chat.addSel.has(item.card.id)) : [];
+    const onList = ctx.state.chat.tab === "list";
+    const unnamed = account ? unnamedOf(account).length : 0;
     return [
       toolbar(ctx, {
-        title: "Chat",
-        search: tier !== "none",
+        title: "Chat addresses",
         extra: [
           accounts.length > 1
-            ? h("select", { "aria-label": "Chat account", onChange: (e) => {
+            ? h("select", { "aria-label": "Chat account", title: "The XMPP account whose chat list is shown", onChange: (e) => {
               ctx.state.chat.account = e.target.value;
-              ctx.state.chat.addSel.clear();
               ctx.render();
             } }, accounts.map((a) => h("option", { value: a.jid, selected: a.jid === account?.jid }, a.jid)))
             : null,
-          tier !== "none" ? h("button", { onClick: () => ctx.omemo.openOptions("contacts").catch(() => {}) }, "OMEMO settings") : null,
-          h("button", { disabled: omemo.loading, onClick: () => refresh(ctx) }, omemo.loading ? "Checking…" : "Refresh"),
+          tier !== "none" ? h("button", { disabled: omemo.loading, onClick: () => refreshOmemo(ctx) }, omemo.loading ? "Checking…" : "Refresh") : null,
         ],
       }),
-      h("div", { class: "page", "data-scroll": "page" }, body),
-      selected.length
-        ? pendingBar(ctx, {
-          text: `${plural(selected.length, "person is", "people are")} checked for your chat list.`,
-          applyLabel: selected.length === 1 ? "Add to chat" : `Add ${selected.length} to chat`,
-          onApply: () => addToChat(ctx, account, selected),
-          onClear: () => {
-            ctx.state.chat.addSel.clear();
-            ctx.render();
-          },
-        })
-        : null,
+      h("div", { class: "view-tabs" },
+        h("button", { class: onList ? "" : "active", onClick: () => {
+          ctx.state.chat.tab = "contacts";
+          ctx.state.selected = null;
+          ctx.render();
+        } }, "Contacts"),
+        h("button", { class: onList ? "active" : "", onClick: () => {
+          ctx.state.chat.tab = "list";
+          ctx.state.selected = null;
+          ctx.render();
+        } }, `Chat list${unnamed ? ` (${unnamed} without a name)` : ""}`)),
+      onList ? chatListTab(ctx) : contactsTab(ctx),
     ];
   },
 
   detail(ctx) {
-    const tier = omemoTier(ctx.state.omemo.status);
-    const account = currentAccount(ctx);
     const helpBox = help("What these mean", CHAT_HELP);
-    const proPitch = tier === "free"
-      ? [
-        h("h4", {}, "OMEMO Pro for Thunderbird"),
-        h("p", {}, "Adds people from your address book to your chat list, and audio calls with JMP.chat phone numbers, Cheogram and other XMPP apps. $10, one time."),
-        h("div", { class: "detail-actions" }, h("button", { onClick: () => openLink(LINKS.omemoPro) }, "Get OMEMO Pro")),
-      ]
-      : null;
     if (ctx.state.chat.pick) {
       return [
         h("h3", {}, "Who is this?"),
@@ -508,15 +538,15 @@ export default {
       ];
     }
     const selected = String(ctx.state.selected ?? "");
-    if (account && selected.startsWith("jid:")) {
-      const contact = account.contacts.find((c) => `jid:${c.jid}` === selected);
+    if (ctx.state.chat.tab === "list") {
+      const account = currentAccount(ctx);
+      const contact = account && selected.startsWith("jid:") ? account.contacts.find((c) => `jid:${c.jid}` === selected) : null;
       if (contact) {
-        const unnamed = contact.status === "unmatched";
         return [
           h("h3", {}, shown(contact.jid)),
           h("p", {}, contact.jid),
           h("p", {}, namesRow(contact, account.mode)),
-          unnamed
+          contact.status === "unmatched"
             ? h("div", { class: "detail-actions" },
               h("button", { class: "primary", onClick: () => openPick(ctx, contact.jid, "pick-search") }, "Add to a card"),
               h("button", { onClick: () => openPick(ctx, contact.jid) }, "New card"))
@@ -524,28 +554,21 @@ export default {
           helpBox,
         ];
       }
-    }
-    const item = account ? addable(ctx, account).find((x) => x.card.id === selected) : null;
-    if (item) {
       return [
-        cardSummary(item.card, () => openEditor(ctx, item.card.id)),
-        h("h4", {}, "Not in your chat list yet"),
-        h("p", {}, item.via === "phone" ? `Through JMP.chat: ${item.jid}` : `Chat address: ${item.jid}`),
-        tier === "pro" && ctx.state.omemo.canAdd
-          ? h("div", { class: "detail-actions" }, h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: () => addToChat(ctx, account, [item]) }, "Add to chat"))
-          : null,
-        proPitch,
+        h("h3", {}, "Chat list"),
+        h("p", {}, "Thunderbird's chat list for the account, through OMEMO for Thunderbird. Chat contacts get their names from your cards; the ones no card has are listed under No name yet, each with Add to a card and New card."),
+        helpBox,
       ];
     }
+    const card = ctx.state.cards.find((c) => c.id === selected);
+    if (card) {
+      return contactPanel(ctx, card);
+    }
     return [
-      h("h3", {}, "Chat"),
-      h("p", {}, "Your XMPP chat list next to your address book:"),
-      h("ul", {},
-        h("li", {}, "Not named: chat contacts no card has. Add each to the person's card, or make a card, and it gets the name."),
-        h("li", {}, "Not in your chat list yet: people with a phone number or chat address you can't chat with yet. Add to chat puts them on your chat list (OMEMO Pro)."),
-        h("li", {}, "In your address book: chat contacts named from their cards.")),
+      h("h3", {}, "Chat addresses"),
+      h("p", {}, "Every contact with a phone number or a chat address. Check some (or Select all), then Add JMP.chat addresses to put the JMP.chat address their number makes on their cards, or Add to chat list to put them in Thunderbird's chat list."),
+      h("p", {}, "Select a contact to see and change everything on it. Its chat addresses have + JMP.chat address and an In chat list checkbox."),
       helpBox,
-      proPitch,
     ];
   },
 };
