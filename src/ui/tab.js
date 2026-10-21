@@ -544,7 +544,7 @@ function renderSidebar() {
 function omemoItem() {
   const item = {
     none: { text: "Get OMEMO for Thunderbird", icon: "\u2197", title: "End-to-end encrypted XMPP chat in Thunderbird. Opens its page in your web browser.", go: () => openLink(LINKS.omemo) },
-    free: { text: "Get OMEMO + Calls", icon: "\u2197", title: "OMEMO for Thunderbird + Calls adds audio calls in Thunderbird, with Cheogram, Conversations and other XMPP apps. Opens its page in your web browser.", go: () => openLink(LINKS.omemoPro) },
+    free: { text: "Get OMEMO + Calls", icon: "\u2197", title: "OMEMO for Thunderbird + Calls adds audio calls in Thunderbird, with JMP.chat numbers, Cheogram, Conversations and other XMPP apps. Opens its page in your web browser.", go: () => openLink(LINKS.omemoPro) },
     pro: { text: "OMEMO settings", icon: "\u2699", title: "Open the OMEMO add-on's settings", go: () => ctx.omemo.openOptions("settings").catch(() => {}) },
   }[omemoTier(state.omemo.status)];
   const go = item.go;
