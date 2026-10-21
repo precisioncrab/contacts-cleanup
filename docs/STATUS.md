@@ -31,6 +31,7 @@ _Current state and log, newest on top. The plan is `docs/PLAN.md`; the checks on
 ## Log
 
 ### 2026-10-21
+- **Test cards to import** (the maintainer didn't want to type the made-up cards in): `docs/test-cards/Cleanup test.vcf` (17 cards) and `Cleanup test 2.vcf` (1), imported with Tools > Import > Import from a file > Import Address Books > vCard, which makes a new address book named after the file (read in Thunderbird 158's `aboutImport.js`). Besides the cards the steps already used, they hold Test P's photo (a data URI, which Thunderbird 158 shows, `AddrBookCard.photoURL`), a UK number, a number with an extension, a card with N but no FN, one with only an organization, a one-word email, a chat address from elsewhere, one without `xmpp:` and an X-JABBER line. Run through the add-on's own code first: every card gives what `docs/MANUAL-TESTS.md` now expects (the household sorts as Pat+Patricia, Sam+Sammy, Alex). Steps 3 to 7 and 9 updated to match. The folder isn't in the `.xpi`.
 - **Test build 0.1.9: OMEMO Pro's link goes to its Gumroad page** (https://precisioncrab.gumroad.com/l/omemo-pro) instead of the GitHub README, now that both OMEMO listings are published (both pages answered 200 on 2026-10-21): "Learn about OMEMO Pro" on the Chat contacts page and OMEMO Pro on the About page (`src/lib/links.js`). The README links to it too. The manual tests no longer expect a 404 from the OMEMO for Thunderbird page.
 
 ### 2026-10-20

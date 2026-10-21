@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:4.0
+FN:Test Person
+N:Person;Test;;;
+EMAIL;PREF=1:test.person@example.org
+END:VCARD
