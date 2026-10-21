@@ -161,55 +161,125 @@ export function change(from, to, replaced = true) {
 export const tag = (text, kind = "") => h("span", { class: `tag${kind ? ` ${kind}` : ""}` }, text);
 
 /*
- * Long lists draw only the rows on screen (and a few around them), so a page
- * with thousands of contacts answers a click as fast as one with ten. Every
- * row is taken to be as tall as the first one drawn; scrolling redraws just
- * the list. Where each list was scrolled to is kept, so a redraw of the page
- * comes back to the same place.
+ * Long lists draw only the rows on screen (and some around them), so a page
+ * with thousands of contacts answers a click as fast as one with ten. Each
+ * row drawn is measured, and the space above and below the drawn rows is the
+ * real height of the rows it stands for (rows not yet drawn count as the
+ * average), so the list scrolls exactly as far as the wheel or scroll bar
+ * moves it, like a list that draws everything. When a measured row turns out
+ * taller or shorter than counted, the scroll position is corrected so what's
+ * on screen stays put (the browser's own scroll anchoring is off for these
+ * lists). Heights and where each list was scrolled to are kept,
+ * so a redraw of the page comes back to the same place.
  */
 const scrollTops = new Map();
-const rowHeights = new Map();
-const EXTRA_ROWS = 12;
+const averages = new Map();
+const itemHeights = new Map();
+const EXTRA_PX = 800;
 
-/** A scrolling list of `items`, each drawn by `draw(item)`; `empty` shows when there are none. */
+/** A scrolling list of `items`, each drawn by `draw(item)` as one element; `empty` shows when there are none. */
 export function virtualList(key, items, draw, { empty = null } = {}) {
   const list = h("div", { class: "list", "data-scroll": key });
   if (!items.length) {
     list.append(...[empty].flat().filter(Boolean));
     return list;
   }
+  // The browser's scroll anchoring would move the scroll position whenever
+  // the space above the drawn rows changes, and each move draws other rows:
+  // the list ran away several times faster than the wheel. This list keeps
+  // what's on screen in place itself (measure).
+  list.style.overflowAnchor = "none";
+  if (!itemHeights.has(key)) {
+    itemHeights.set(key, new WeakMap());
+  }
+  const known = itemHeights.get(key);
+  const count = items.length;
+  const heights = items.map((item) => (item && typeof item === "object" ? known.get(item) : undefined));
+  const tops = new Float64Array(count + 1);
+  const layout = () => {
+    const guess = averages.get(key) ?? 48;
+    for (let i = 0; i < count; i++) {
+      tops[i + 1] = tops[i] + (heights[i] ?? guess);
+    }
+  };
+  // The item at height y of the list: the last one starting at or above it.
+  const indexAt = (y) => {
+    let lo = 0;
+    let hi = count - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (tops[mid] <= y) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return lo;
+  };
   const above = h("div", { "aria-hidden": "true" });
   const rows = h("div");
   const below = h("div", { "aria-hidden": "true" });
-  let drawn = "";
-  const paint = () => {
-    const rowHeight = rowHeights.get(key) ?? 46;
-    const top = list.isConnected ? list.scrollTop : (scrollTops.get(key) ?? 0);
-    const height = list.clientHeight || window.innerHeight;
-    const start = Math.max(0, Math.floor(top / rowHeight) - EXTRA_ROWS);
-    const end = Math.min(items.length, Math.ceil((top + height) / rowHeight) + EXTRA_ROWS);
-    if (`${start}:${end}` === drawn) {
+  let first = 0;
+  let last = 0;
+  const spacers = () => {
+    above.style.height = `${tops[first]}px`;
+    below.style.height = `${tops[count] - tops[last]}px`;
+  };
+  const measure = () => {
+    if (!list.isConnected) {
       return;
     }
-    drawn = `${start}:${end}`;
-    above.style.height = `${start * rowHeight}px`;
-    below.style.height = `${(items.length - end) * rowHeight}px`;
-    rows.replaceChildren(...items.slice(start, end).map(draw));
-    // The first time a row is on screen, its real height replaces the guess.
-    const first = rows.firstElementChild;
-    if (list.isConnected && !rowHeights.has(key) && first?.offsetHeight) {
-      rowHeights.set(key, first.offsetHeight);
-      drawn = "";
-      paint();
+    const anchor = indexAt(list.scrollTop);
+    const into = list.scrollTop - tops[anchor];
+    let changed = false;
+    [...rows.children].forEach((el, k) => {
+      const height = el.offsetHeight;
+      const item = items[first + k];
+      if (height && heights[first + k] !== height) {
+        heights[first + k] = height;
+        if (item && typeof item === "object") {
+          known.set(item, height);
+        }
+        changed = true;
+      }
+    });
+    if (!changed) {
+      return;
     }
+    const measured = heights.filter((x) => x !== undefined);
+    averages.set(key, measured.reduce((a, b) => a + b, 0) / measured.length);
+    layout();
+    spacers();
+    const want = tops[anchor] + into;
+    if (Math.abs(list.scrollTop - want) >= 1) {
+      list.scrollTop = want;
+    }
+  };
+  const paint = (force = false) => {
+    const top = list.isConnected ? list.scrollTop : (scrollTops.get(key) ?? 0);
+    const height = list.clientHeight || window.innerHeight;
+    const start = indexAt(Math.max(0, top - EXTRA_PX));
+    const end = Math.min(count, indexAt(top + height + EXTRA_PX) + 1);
+    if (!force && start === first && end === last) {
+      return;
+    }
+    first = start;
+    last = end;
+    spacers();
+    rows.replaceChildren(...items.slice(start, end).map(draw));
+    measure();
   };
   list.addEventListener("scroll", () => {
     scrollTops.set(key, list.scrollTop);
     paint();
   });
+  layout();
   list.append(above, rows, below);
-  paint();
-  requestAnimationFrame(paint);
+  paint(true);
+  requestAnimationFrame(() => {
+    measure();
+    paint();
+  });
   return list;
 }
 
