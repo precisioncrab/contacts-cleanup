@@ -2,9 +2,9 @@
 
 _Current state and log, newest on top. The plan is `docs/PLAN.md`; the checks only a person in Thunderbird can do are `docs/MANUAL-TESTS.md`; the ATN listing text is `docs/LISTING.md`._
 
-## Current state (2026-10-20)
+## Current state (2026-10-21)
 
-**Test build 0.1.8** (0.1.7 plus OMEMO for Thunderbird links to its Gumroad page). 0.1.6 ran in Thunderbird 2026-10-20 (the maintainer: "it is working"); the rest of `docs/MANUAL-TESTS.md` is still open. All five features are built (`dist/contacts-cleanup-0.1.7.xpi`, from `npm run package`):
+**Test build 0.1.9** (0.1.8 plus OMEMO Pro's link to its Gumroad page; both OMEMO links now go to Gumroad, both pages live 2026-10-21). 0.1.6 ran in Thunderbird 2026-10-20 (the maintainer: "it is working"); the rest of `docs/MANUAL-TESTS.md` is still open. All five features are built (`dist/contacts-cleanup-0.1.9.xpi`, from `npm run package`):
 
 | Area | State |
 |---|---|
@@ -29,6 +29,9 @@ _Current state and log, newest on top. The plan is `docs/PLAN.md`; the checks on
 4. Later: Cheogram group texts (`+1...,+1...@cheogram.com`) and chat contacts from cards come from the OMEMO side (Pro).
 
 ## Log
+
+### 2026-10-21
+- **Test build 0.1.9: OMEMO Pro's link goes to its Gumroad page** (https://precisioncrab.gumroad.com/l/omemo-pro) instead of the GitHub README, now that both OMEMO listings are published (both pages answered 200 on 2026-10-21): "Learn about OMEMO Pro" on the Chat contacts page and OMEMO Pro on the About page (`src/lib/links.js`). The README links to it too. The manual tests no longer expect a 404 from the OMEMO for Thunderbird page.
 
 ### 2026-10-20
 - **Test build 0.1.8: OMEMO for Thunderbird links go to its Gumroad page** (https://precisioncrab.gumroad.com/l/omemo) instead of GitHub, as the maintainer asked: the Get OMEMO buttons, the sidebar item, the Chat contacts page, About and the Help menu (`src/lib/links.js`, one link now), the README and the listing text. The page returned 404 on 2026-10-20 (the free listing isn't published yet); the links work once it is. OMEMO Pro's link still goes to the GitHub README's Pro section.

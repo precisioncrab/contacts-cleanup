@@ -3,8 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Where this add-on points people: the one place to change a link (for
- * example when OMEMO Pro's Gumroad listing goes live).
+ * Where this add-on points people: the one place to change a link.
  */
 
 export const LINKS = {
@@ -12,7 +11,8 @@ export const LINKS = {
   issues: "https://github.com/precisioncrab/contacts-cleanup/issues",
   // OMEMO for Thunderbird's Gumroad page (free, pay what you want).
   omemo: "https://precisioncrab.gumroad.com/l/omemo",
-  omemoPro: "https://github.com/precisioncrab/thunderbird-omemo#omemo-pro-for-thunderbird",
+  // OMEMO Pro for Thunderbird's Gumroad page (paid, adds calls).
+  omemoPro: "https://precisioncrab.gumroad.com/l/omemo-pro",
   daynizer: "https://addons.thunderbird.net/en-US/thunderbird/addon/daynizer/",
   jmp: "https://jmp.chat/",
 };
