@@ -24,7 +24,7 @@ import {
   parseVCard, parseLine, serializeVCard, getAll, first, setValue, makeProp, insertProp, removeProp,
   withoutGroupAndParams, unescapeText, escapeText, splitStructured, typesOf,
 } from "./vcard.js";
-import { isRealName, label, nameFromParts } from "./card.js";
+import { isRealName, label, nameFromParts, XMPP_PARAMS } from "./card.js";
 import { phoneKey } from "./phone.js";
 
 /** "Jöhn  O'Brien" and "o'brien, john" -> "brien john o". */
@@ -494,7 +494,9 @@ export function mergeVCard(cards, keeperId, choice) {
     }
     for (const { value, type } of choice.added?.[field.name] ?? []) {
       if (!isEmptyValue(value)) {
-        insertProp(vcard, makeProp(field.name, encodeValue(field.name, value), type ? [{ key: "TYPE", value: type }] : []), "FN");
+        const encoded = encodeValue(field.name, value);
+        const params = [...(type ? [{ key: "TYPE", value: type }] : []), ...(field.name === "IMPP" && /^xmpp:/i.test(encoded) ? XMPP_PARAMS : [])];
+        insertProp(vcard, makeProp(field.name, encoded, params), "FN");
       }
     }
   }

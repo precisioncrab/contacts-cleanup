@@ -5,7 +5,7 @@
 /** Phone numbers: every number in one format, each change checked or not before applying. */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, change, emptyState, selectAll, matches, tag, pendingBar } from "../parts.js";
+import { toolbar, row, change, emptyState, selectAll, matches, tag, pendingBar, virtualList } from "../parts.js";
 import { contactPanel } from "../contact-panel.js";
 import { label } from "../../core/card.js";
 import { applyPhoneFixes } from "../../core/fixes.js";
@@ -69,31 +69,40 @@ export default {
           }
           ctx.render();
         }))),
-      h("div", { class: "list", "data-scroll": "list" },
-        fixes.length === 0 && skipped.length === 0
-          ? emptyState(ctx.state.search ? "Nothing matches the search." : "Every phone number is in this format.", "")
-          : [
-            fixes.length === 0 ? emptyState("Every number that can be read is in this format.", "") : null,
-            fixes.map(({ card, fix, key }) => row(ctx, {
-              key: card.id,
-              check: {
-                checked: !ctx.state.phoneOff.has(key),
-                onChange: (checked) => {
-                  ctx.state.phoneOff[checked ? "delete" : "add"](key);
-                  ctx.render();
-                },
-              },
-              title: label(card),
-              meta: [change(fix.from, fix.to), card.phones[fix.index]?.mobile ? tag("mobile", "plain") : null, h("span", {}, card.bookName)],
-            })),
-            skipped.length ? h("div", { class: "list-heading" }, `Left as they are (${skipped.length})`) : null,
-            skipped.map((s) => row(ctx, {
-              key: s.card.id,
-              muted: true,
-              title: label(s.card),
-              meta: [h("span", {}, s.value), h("span", {}, SKIP_REASONS[s.reason])],
-            })),
-          ]),
+      virtualList("phones", [
+        ...(fixes.length === 0 && skipped.length ? [{ kind: "none" }] : []),
+        ...fixes.map((f) => ({ kind: "fix", ...f })),
+        ...(skipped.length ? [{ kind: "heading" }] : []),
+        ...skipped.map((sk) => ({ kind: "skip", ...sk })),
+      ], (item) => {
+        if (item.kind === "none") {
+          return emptyState("Every number that can be read is in this format.", "");
+        }
+        if (item.kind === "heading") {
+          return h("div", { class: "list-heading" }, `Left as they are (${skipped.length})`);
+        }
+        if (item.kind === "skip") {
+          return row(ctx, {
+            key: item.card.id,
+            muted: true,
+            title: label(item.card),
+            meta: [h("span", {}, item.value), h("span", {}, SKIP_REASONS[item.reason])],
+          });
+        }
+        const { card, fix, key } = item;
+        return row(ctx, {
+          key: card.id,
+          check: {
+            checked: !ctx.state.phoneOff.has(key),
+            onChange: (checked) => {
+              ctx.state.phoneOff[checked ? "delete" : "add"](key);
+              ctx.render();
+            },
+          },
+          title: label(card),
+          meta: [change(fix.from, fix.to), card.phones[fix.index]?.mobile ? tag("mobile", "plain") : null, h("span", {}, card.bookName)],
+        });
+      }, { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "Every phone number is in this format.", "") }),
       on.length
         ? pendingBar(ctx, {
           text: `${plural(on.length, "number is", "numbers are")} checked. Nothing is saved until you click Apply.`,

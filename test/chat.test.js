@@ -9,7 +9,7 @@ import {
   normalizeGateway, jmpAddress, phoneChoices, chatState, addChatAddress, removeChatAddress, prefixFixes, applyPrefixFixes,
 } from "../src/core/chat.js";
 import { readCard } from "../src/core/card.js";
-import { parseVCard, getAll } from "../src/core/vcard.js";
+import { parseVCard, serializeVCard, getAll } from "../src/core/vcard.js";
 
 test("gateways as typed", () => {
   assert.equal(normalizeGateway(" @Cheogram.com "), "cheogram.com");
@@ -35,10 +35,11 @@ test("states: none, ours, theirs, no-phone", () => {
   assert.equal(chatState(card(["TEL:555-123-4567", "X-JABBER:jane@example.org"])).state, "theirs");
 });
 
-test("adding writes IMPP:xmpp: once; removing takes only that address", () => {
+test("adding writes IMPP:xmpp: once, marked as Jabber; removing takes only that address", () => {
   const c = card(["FN:Jane Doe", "TEL:555-123-4567", "EMAIL:jane@example.org", "IMPP:xmpp:jane@chat.example.org"]);
   const added = addChatAddress(c.vCard, "+15551234567@cheogram.com");
-  assert.ok(added.includes("\r\nIMPP:xmpp:+15551234567@cheogram.com\r\n"));
+  // X-SERVICE-TYPE=Jabber, or Google Contacts stores it as "Other" and sends it back as x-apple:.
+  assert.ok(added.includes("\r\nIMPP;X-SERVICE-TYPE=Jabber:xmpp:+15551234567@cheogram.com\r\n"));
   assert.equal(addChatAddress(added, "+15551234567@cheogram.com"), added);
   const removed = removeChatAddress(added, "+15551234567@cheogram.com");
   assert.deepEqual(getAll(parseVCard(removed), "IMPP").map((p) => p.value), ["xmpp:jane@chat.example.org"]);
@@ -53,4 +54,41 @@ test("prefix fixes: an address without xmpp: gets it; X-JABBER gets an IMPP line
   assert.deepEqual(getAll(fixed, "IMPP").map((p) => p.value).sort(), ["xmpp:jane2@chat.example.org", "xmpp:jane3@chat.example.org", "xmpp:jane@chat.example.org"]);
   assert.equal(getAll(fixed, "X-JABBER").length, 2);
   assert.deepEqual(prefixFixes(readCard({ id: "y", vCard: applyPrefixFixes(c.vCard, fixes) })), []);
+});
+
+// A card the way Google Contacts sends it back after it stored a chat address as "Other" three times.
+const googled = [
+  "VERSION:3.0",
+  "FN:Pat Roe",
+  "TEL;TYPE=CELL,PREF:+1 555 666 7777",
+  "item1.EMAIL;TYPE=PREF:pat@example.org",
+  "ITEM2.IMPP;TYPE=PREF;X-SERVICE-TYPE=Other:x-apple:+15556667777@cheogram.com",
+  "ITEM3.IMPP;X-SERVICE-TYPE=Other:x-apple:+15556667777@cheogram.com",
+  "ITEM4.IMPP;X-SERVICE-TYPE=Other:x-apple:+15556667777@cheogram.com",
+  "item1.X-ABLabel:",
+  "ITEM2.X-ABLABEL:Other",
+  "ITEM3.X-ABLABEL:Other",
+  "ITEM4.X-ABLABEL:Other",
+];
+
+test("Google's x-apple: chat addresses count as the address: never added again", () => {
+  const c = card(googled);
+  assert.deepEqual(c.chat.map((x) => [x.kind, x.address]), [
+    ["x-apple", "+15556667777@cheogram.com"], ["x-apple", "+15556667777@cheogram.com"], ["x-apple", "+15556667777@cheogram.com"],
+  ]);
+  assert.equal(addChatAddress(c.vCard, "+15556667777@cheogram.com"), c.vCard);
+});
+
+test("fixing x-apple: copies leaves one xmpp: line marked as Jabber, in the first copy's group; the rest go with their labels", () => {
+  const c = card(googled);
+  const fixes = prefixFixes(c);
+  assert.deepEqual(fixes.map((f) => [f.kind, f.address, f.copies]), [["x-apple", "+15556667777@cheogram.com", 3]]);
+  const fixed = parseVCard(applyPrefixFixes(c.vCard, fixes));
+  assert.deepEqual(getAll(fixed, "IMPP").map((p) => p.raw), ["ITEM2.IMPP;TYPE=PREF;X-SERVICE-TYPE=Jabber:xmpp:+15556667777@cheogram.com"]);
+  assert.deepEqual(getAll(fixed, "X-ABLABEL").map((p) => p.raw), ["item1.X-ABLabel:", "ITEM2.X-ABLABEL:Other"]);
+  assert.deepEqual(prefixFixes(readCard({ id: "f", vCard: serializeVCard(fixed) })), []);
+  // With the xmpp: line there already, the x-apple: copies just go.
+  const both = card([...googled, "IMPP;X-SERVICE-TYPE=Jabber:xmpp:+15556667777@cheogram.com"]);
+  const cleaned = parseVCard(applyPrefixFixes(both.vCard, prefixFixes(both)));
+  assert.deepEqual(getAll(cleaned, "IMPP").map((p) => p.value), ["xmpp:+15556667777@cheogram.com"]);
 });

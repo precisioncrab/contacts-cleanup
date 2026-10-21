@@ -15,6 +15,27 @@ const tidy = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 /** Names that are only a number or an address are no names. */
 export const isRealName = (name) => /\p{L}/u.test(name) && !/^[^@\s]+@[^@\s]+$/.test(name.trim());
 
+/**
+ * The parameter a chat address line carries so Google Contacts and iCloud
+ * keep it as XMPP: written without it, Google stores the address as an
+ * "Other" service and sends it back as x-apple:, which Thunderbird and
+ * OMEMO for Thunderbird can't use.
+ */
+export const XMPP_PARAMS = [{ key: "X-SERVICE-TYPE", value: "Jabber" }];
+
+/**
+ * The address in a chat address line, whatever it's written as: "xmpp:a@b",
+ * Google's "x-apple:a@b", or a bare "a@b"; null for anything else.
+ */
+export function chatAddressOf(value) {
+  const text = String(value ?? "").trim();
+  const apple = /^x-apple:(.+)$/i.exec(text);
+  if (apple) {
+    return bareAddress(apple[1]);
+  }
+  return xmppAddress(text) ?? (/^[a-z][a-z0-9+.-]*:/i.test(text) ? null : bareAddress(text));
+}
+
 /** "xmpp:alice@example.org?message" -> "alice@example.org"; else null. */
 export function xmppAddress(value) {
   const match = /^xmpp:(?:\/\/[^/]*\/)?([^?#]+)/i.exec(String(value ?? "").trim());
@@ -47,6 +68,7 @@ export const isMobile = (prop) => typesOf(prop).some((t) => t === "cell" || t ==
  *   phones      [{ prop, value, e164, key, mobile }]
  *   emails      [{ prop, address }]
  *   chat        [{ prop, address, kind }]: kind "xmpp" (IMPP:xmpp:...),
+ *               "x-apple" (Google's rewrite of one it didn't know as XMPP),
  *               "noscheme" (an IMPP address without its xmpp:, which
  *               Thunderbird's card editor refuses) or "x-jabber" (older
  *               apps' X-JABBER line, which Thunderbird doesn't show)
@@ -75,6 +97,8 @@ export function readCard(node, bookName = "") {
     const address = xmppAddress(value);
     if (address) {
       chat.push({ prop, address, kind: "xmpp" });
+    } else if (/^x-apple:/i.test(value) && chatAddressOf(value)) {
+      chat.push({ prop, address: chatAddressOf(value), kind: "x-apple" });
     } else if (!/^[a-z][a-z0-9+.-]*:/i.test(value) && bareAddress(value)) {
       chat.push({ prop, address: bareAddress(value), kind: "noscheme" });
     }

@@ -18,7 +18,7 @@
  */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, avatar, change, help, tag, emptyState, selectAll, matches } from "../parts.js";
+import { toolbar, row, avatar, change, help, tag, emptyState, selectAll, matches, virtualList } from "../parts.js";
 import { contactPanel } from "../contact-panel.js";
 import { label } from "../../core/card.js";
 import { addChatAddress, applyPrefixFixes, normalizeGateway, DEFAULT_GATEWAY } from "../../core/chat.js";
@@ -78,11 +78,21 @@ const FILTERS = [
   ["fix", "Chat addresses to fix"],
 ];
 
+// The rows for every card, made again only when the cards, the chat list, the gateway or the fixes change.
+let rowsMemo = { inputs: [], rows: [] };
+
+function allRows(ctx) {
+  const inputs = [ctx.state.cards, currentAccount(ctx), gatewayOf(ctx), ctx.derived.prefix];
+  if (inputs.some((x, i) => x !== rowsMemo.inputs[i])) {
+    const fixIds = new Set(ctx.derived.prefix.map((p) => p.card.id));
+    rowsMemo = { inputs, rows: chatRows(ctx.state.cards, { has: chatListHas(ctx), gateway: gatewayOf(ctx) }).map((r) => ({ ...r, fix: fixIds.has(r.card.id) })) };
+  }
+  return rowsMemo.rows;
+}
+
 function contactRows(ctx) {
-  const fixIds = new Set(ctx.derived.prefix.map((p) => p.card.id));
   const filter = ctx.state.chat.filter;
-  return chatRows(ctx.state.cards, { has: chatListHas(ctx), gateway: gatewayOf(ctx) })
-    .map((r) => ({ ...r, fix: fixIds.has(r.card.id) }))
+  return allRows(ctx)
     .filter((r) => matches(r.card, ctx.state.search)
       && (filter === "all"
         || (filter === "none" && !r.addresses.length)
@@ -156,7 +166,7 @@ function contactsTab(ctx) {
   return [
     fixes
       ? h("div", { class: "omemo-banner" },
-        h("span", {}, `${plural(fixes, "contact has a chat address", "contacts have chat addresses")} Thunderbird's card editor can't use (no xmpp: in front, or an old X-JABBER field).`),
+        h("span", {}, `${plural(fixes, "contact has a chat address", "contacts have chat addresses")} Thunderbird can't use: no xmpp: in front, an old X-JABBER field, or turned into x-apple: by Google Contacts (Fix makes them xmpp: again and removes copies).`),
         h("button", { class: "small", onClick: () => {
           ctx.state.chat.filter = "fix";
           ctx.render();
@@ -190,10 +200,7 @@ function contactsTab(ctx) {
         }
         ctx.render();
       }))),
-    h("div", { class: "list", "data-scroll": "list" },
-      rows.length === 0
-        ? emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts with a phone number or chat address here.", "")
-        : rows.map((r) => row(ctx, {
+    virtualList("chat-contacts", rows, (r) => row(ctx, {
           key: r.card.id,
           muted: !r.addresses.length && !r.jmp,
           check: { checked: sel.has(r.card.id), title: "Select", onChange: (value) => {
@@ -211,7 +218,7 @@ function contactsTab(ctx) {
             r.fix ? tag("to fix", "warn") : null,
             r.inChat ? tag("in chat list") : null,
           ],
-        }))),
+        }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts with a phone number or chat address here.", "") }),
     selectedBar(ctx, canChatList),
   ];
 }
@@ -434,10 +441,15 @@ function namedSection(ctx, account) {
     ctx.state.chat.namedOpen = e.target.open;
   } },
   h("summary", { class: "list-heading" }, `In your address book: ${rows.length}`),
+  // The contact's name first (as Thunderbird's chat list shows it), then its number or address.
   h("div", { class: "chat-list" }, rows.map((c) => row(ctx, {
     key: `jid:${c.jid}`,
-    title: shown(c.jid),
-    meta: [shown(c.jid) !== c.jid ? h("span", {}, c.jid) : null, h("span", {}, namesRow(c, account.mode))],
+    title: c.name || c.current || shown(c.jid),
+    meta: [
+      h("span", {}, shown(c.jid)),
+      shown(c.jid) !== c.jid ? h("span", {}, c.jid) : null,
+      c.status === "named" ? null : h("span", {}, namesRow(c, account.mode)),
+    ],
   }))));
 }
 

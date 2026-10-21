@@ -18,16 +18,17 @@
 
 import { h } from "./dom.js";
 import { avatar } from "./parts.js";
-import { label as cardLabel, xmppAddress } from "../core/card.js";
+import { label as cardLabel, chatAddressOf } from "../core/card.js";
 import { comparable, parseVCard, serializeVCard } from "../core/vcard.js";
-import { cardModel, modelToVCard, newContactVCard, emptyModel, chatUri, PHONE_TYPES, EMAIL_TYPES, ADDRESS_TYPES } from "../core/card-model.js";
+import { cardModel, modelToVCard, newContactVCard, emptyModel, PHONE_TYPES, EMAIL_TYPES, ADDRESS_TYPES } from "../core/card-model.js";
 import { jmpAddress, normalizeGateway, DEFAULT_GATEWAY } from "../core/chat.js";
 import { phoneNumber } from "../core/phone.js";
 import { chatListHas, changeChatList, currentAccount } from "./omemo-state.js";
 import { LINKS, openLink } from "../lib/links.js";
 
 const gatewayOf = (ctx) => normalizeGateway(ctx.state.settings.gateway) ?? DEFAULT_GATEWAY;
-const bareChat = (value) => xmppAddress(chatUri(value)) ?? "";
+// The address in a chat address box, however it's written (xmpp:, Google's x-apple:, bare).
+const bareChat = (value) => chatAddressOf(value) ?? "";
 const writableBooks = (ctx) => {
   const excluded = new Set(ctx.state.settings.excludedBooks);
   return ctx.state.books.filter((b) => !b.readOnly && !b.remote && !excluded.has(b.id));

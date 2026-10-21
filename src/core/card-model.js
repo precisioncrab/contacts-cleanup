@@ -14,6 +14,7 @@
  */
 
 import { parseVCard, serializeVCard, parseLine, getAll, first, setValue, makeProp, insertProp, removeProp, typesOf, unescapeText, escapeText, splitStructured } from "./vcard.js";
+import { XMPP_PARAMS } from "./card.js";
 
 /** The types the editor offers, as stored (vCard TYPE) and shown. "other" is stored as no TYPE. */
 export const PHONE_TYPES = [["cell", "mobile"], ["home", "home"], ["work", "work"], ["main", "main"], ["fax", "fax"], ["pager", "pager"], ["other", "other"]];
@@ -195,7 +196,9 @@ export function modelToVCard(vCard, model) {
       } else {
         // A new value, or a new type: the type picked replaces the line's TYPE; PREF and the rest stay.
         const typed = field.types && item.type && item.type !== "other" ? [{ key: "TYPE", value: item.type }] : [];
-        prop = makeProp(field.name, value, [...(source ? source.params.filter((p) => p.key !== "TYPE") : []), ...typed], source?.group ?? "");
+        // A new chat address is marked as Jabber, so Google Contacts keeps it as XMPP.
+        const jabber = field.name === "IMPP" && !source && /^xmpp:/i.test(value) ? XMPP_PARAMS : [];
+        prop = makeProp(field.name, value, [...(source ? source.params.filter((p) => p.key !== "TYPE") : []), ...typed, ...jabber], source?.group ?? "");
       }
       insertAfterAny(vcard, prop, field.after);
     }

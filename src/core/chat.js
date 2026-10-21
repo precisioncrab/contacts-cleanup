@@ -17,7 +17,7 @@
  */
 
 import { parseVCard, serializeVCard, getAll, setValue, makeProp, insertProp, removeProp, unescapeText } from "./vcard.js";
-import { xmppAddress } from "./card.js";
+import { xmppAddress, chatAddressOf, XMPP_PARAMS } from "./card.js";
 
 export const DEFAULT_GATEWAY = "cheogram.com";
 
@@ -68,11 +68,17 @@ export function chatState(card, generated = []) {
   return { state, choices, addresses, ours };
 }
 
-/** The vCard with IMPP:xmpp:<address> added, unless it's there already. */
+/** Whether the vCard has this chat address, written any way (xmpp:, x-apple:, bare, X-JABBER). */
+export function hasChatAddress(vcard, address) {
+  const wanted = String(address).toLowerCase();
+  return [...getAll(vcard, "IMPP"), ...getAll(vcard, "X-JABBER")].some((p) => chatAddressOf(unescapeText(p.value)) === wanted);
+}
+
+/** The vCard with IMPP;X-SERVICE-TYPE=Jabber:xmpp:<address> added, unless it has the address already. */
 export function addChatAddress(vCard, address) {
   const vcard = parseVCard(vCard);
-  if (!getAll(vcard, "IMPP").some((p) => xmppAddress(unescapeText(p.value)) === address.toLowerCase())) {
-    insertProp(vcard, makeProp("IMPP", `xmpp:${address}`), "EMAIL");
+  if (!hasChatAddress(vcard, address)) {
+    insertProp(vcard, makeProp("IMPP", `xmpp:${address}`, XMPP_PARAMS), "EMAIL");
   }
   return serializeVCard(vcard);
 }
@@ -89,23 +95,36 @@ export function removeChatAddress(vCard, address) {
 }
 
 /**
- * Chat addresses Thunderbird can't use as they are: [{ kind, address, text }].
+ * Chat addresses Thunderbird can't use as they are: [{ kind, address, text, copies }].
  * "noscheme": an IMPP address without "xmpp:", which gets it.
  * "x-jabber": an X-JABBER line with no matching IMPP, which gets one (the
- * X-JABBER line stays, for the apps that read it).
+ *   X-JABBER line stays, for the apps that read it).
+ * "x-apple": Google's rewrite of a chat address it didn't know as XMPP
+ *   (`copies` of them, from adding it again): the first becomes xmpp: again
+ *   and the other copies go; all go when the card has it as xmpp: already.
  */
 export function prefixFixes(card) {
   const xmpp = new Set(card.chat.filter((c) => c.kind === "xmpp").map((c) => c.address));
   const fixes = [];
   const seen = new Set();
   for (const chat of card.chat) {
-    if (chat.kind === "xmpp" || xmpp.has(chat.address) || seen.has(chat.address)) {
+    if (chat.kind === "xmpp" || seen.has(chat.address) || (chat.kind !== "x-apple" && xmpp.has(chat.address))) {
       continue;
     }
     seen.add(chat.address);
-    fixes.push({ kind: chat.kind, address: chat.address, text: unescapeText(chat.prop.value).trim() });
+    const copies = card.chat.filter((c) => c.kind === chat.kind && c.address === chat.address).length;
+    fixes.push({ kind: chat.kind, address: chat.address, text: unescapeText(chat.prop.value).trim(), copies, hasXmpp: xmpp.has(chat.address) });
   }
   return fixes;
+}
+
+/** Removes a line, and the lines of its vCard group (Google's ITEMn.X-ABLABEL) when nothing else uses the group. */
+function removeWithGroup(vcard, prop) {
+  removeProp(vcard, prop);
+  const group = prop.group.toLowerCase();
+  if (group && !vcard.props.some((p) => p.group.toLowerCase() === group && p.name !== "X-ABLABEL")) {
+    vcard.props.filter((p) => p.group.toLowerCase() === group).forEach((p) => removeProp(vcard, p));
+  }
 }
 
 /** The vCard with the given prefix fixes made. */
@@ -118,7 +137,17 @@ export function applyPrefixFixes(vCard, fixes) {
         setValue(prop, `xmpp:${fix.address}`);
       }
     } else if (fix.kind === "x-jabber" && !getAll(vcard, "IMPP").some((p) => xmppAddress(unescapeText(p.value)) === fix.address)) {
-      insertProp(vcard, makeProp("IMPP", `xmpp:${fix.address}`), "X-JABBER");
+      insertProp(vcard, makeProp("IMPP", `xmpp:${fix.address}`, XMPP_PARAMS), "X-JABBER");
+    } else if (fix.kind === "x-apple") {
+      const apple = getAll(vcard, "IMPP").filter((p) => /^x-apple:/i.test(unescapeText(p.value).trim()) && chatAddressOf(unescapeText(p.value)) === fix.address);
+      const keep = getAll(vcard, "IMPP").some((p) => xmppAddress(unescapeText(p.value)) === fix.address) ? null : apple[0];
+      if (keep) {
+        // The first copy becomes xmpp: in its own place and group, marked as Jabber.
+        const params = [...keep.params.filter((p) => p.key !== "X-SERVICE-TYPE"), ...XMPP_PARAMS];
+        const fixed = makeProp("IMPP", `xmpp:${fix.address}`, params, keep.group);
+        vcard.props.splice(vcard.props.indexOf(keep), 1, fixed);
+      }
+      apple.filter((p) => p !== keep).forEach((p) => removeWithGroup(vcard, p));
     }
   }
   return serializeVCard(vcard);

@@ -10,7 +10,7 @@
  */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, avatar, emptyState, matches } from "../parts.js";
+import { toolbar, row, avatar, emptyState, matches, virtualList } from "../parts.js";
 import { contactPanel, startNewContact } from "../contact-panel.js";
 import { label } from "../../core/card.js";
 
@@ -82,7 +82,9 @@ export default {
   count: (ctx) => ctx.state.cards.length,
 
   main(ctx) {
-    const list = visible(ctx).sort((a, b) => label(a).localeCompare(label(b)));
+    // The cards come sorted by name (tab.js reload).
+    const list = visible(ctx);
+    const manyBooks = new Set(ctx.state.cards.map((c) => c.bookName)).size > 1;
     const filter = ctx.state.contactsFilter;
     return [
       toolbar(ctx, {
@@ -90,18 +92,15 @@ export default {
         extra: [h("button", { onClick: () => importVCards(ctx) }, "Import vCard…")],
         primary: { label: "+ New contact", onClick: () => startNewContact(ctx) },
       }),
-      h("div", { class: "list", "data-scroll": "list" },
-        list.length === 0
-          ? emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts here yet.", ctx.state.search ? "" : "Check an address book in the sidebar, or add a contact.")
-          : list.map((card) => row(ctx, {
-            key: card.id,
-            lead: avatar(card),
-            title: label(card),
-            meta: [
-              h("span", {}, card.org || card.emails[0]?.address || card.phones[0]?.value || ""),
-              new Set(ctx.state.cards.map((c) => c.bookName)).size > 1 ? h("span", {}, card.bookName) : null,
-            ],
-          }))),
+      virtualList("contacts", list, (card) => row(ctx, {
+        key: card.id,
+        lead: avatar(card),
+        title: label(card),
+        meta: [
+          h("span", {}, card.org || card.emails[0]?.address || card.phones[0]?.value || ""),
+          manyBooks ? h("span", {}, card.bookName) : null,
+        ],
+      }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts here yet.", ctx.state.search ? "" : "Check an address book in the sidebar, or add a contact.") }),
     ];
   },
 

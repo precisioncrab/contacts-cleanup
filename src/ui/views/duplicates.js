@@ -16,7 +16,7 @@
  */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, avatar, cardSummary, emptyState, matches, tag } from "../parts.js";
+import { toolbar, row, avatar, cardSummary, emptyState, matches, tag, virtualList } from "../parts.js";
 import { label } from "../../core/card.js";
 import { mergeOptions, mergeVCard, pairKey, groupLinks, MULTI, ADD_TYPES } from "../../core/duplicates.js";
 import { TYPE_NAMES, ADD_LABELS, PLACEHOLDERS, addressEditor } from "../merge-fields.js";
@@ -390,10 +390,7 @@ export default {
           h("input", { type: "checkbox", checked: across, onChange: (e) => ctx.saveSettings({ duplicatesAcrossBooks: e.target.checked }) }),
           "Also match cards in different address books"),
         h("span", {}, across ? "Merging across address books deletes cards from the other books." : "Only cards in the same address book are compared.")),
-      h("div", { class: "list", "data-scroll": "list" },
-        groups.length === 0
-          ? emptyState(ctx.state.search ? "Nothing matches the search." : "No duplicates found.", ctx.state.search ? "" : `Cards in ${across ? "your address books" : "the same address book"} with the same email address, phone number, chat address or name show here.`)
-          : groups.map((group) => row(ctx, {
+      virtualList("duplicates", groups, (group) => row(ctx, {
             key: groupKey(group),
             lead: h("div", { class: "avatars" }, group.cards.slice(0, 3).map((c) => avatar(c))),
             title: [...new Set(group.cards.map(label))].join(", "),
@@ -407,7 +404,7 @@ export default {
               h("button", { class: "primary", disabled: Boolean(ctx.state.busy), onClick: () => openGroup(ctx, group) }, "Review"),
               h("button", { onClick: () => dismiss(ctx, group) }, "Not duplicates"),
             ],
-          }))),
+          }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "No duplicates found.", ctx.state.search ? "" : `Cards in ${across ? "your address books" : "the same address book"} with the same email address, phone number, chat address or name show here.`) }),
     ];
   },
 

@@ -5,7 +5,7 @@
 /** Missing names: a display name for cards that have none, editable before applying. */
 
 import { h, plural } from "../dom.js";
-import { toolbar, row, emptyState, selectAll, matches, pendingBar } from "../parts.js";
+import { toolbar, row, emptyState, selectAll, matches, pendingBar, virtualList } from "../parts.js";
 import { applyName } from "../../core/fixes.js";
 import { contactPanel } from "../contact-panel.js";
 
@@ -53,10 +53,7 @@ export default {
           }
           ctx.render();
         }))),
-      h("div", { class: "list", "data-scroll": "list" },
-        list.length === 0
-          ? emptyState(ctx.state.search ? "Nothing matches the search." : "Every card has a name.", "")
-          : list.map((n) => row(ctx, {
+      virtualList("names", list, (n) => row(ctx, {
             key: n.card.id,
             check: {
               checked: isOn(ctx, n),
@@ -88,7 +85,7 @@ export default {
               n.card.name ? h("span", {}, `now shows ${n.card.name}`) : null,
               h("span", {}, n.card.bookName),
             ],
-          }))),
+          }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "Every card has a name.", "") }),
       on.length
         ? pendingBar(ctx, {
           text: `${plural(on.length, "name is", "names are")} checked. Nothing is saved until you click Apply.`,

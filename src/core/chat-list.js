@@ -14,9 +14,9 @@
  */
 
 import { parseVCard, serializeVCard, getAll, makeProp, insertProp, escapeText, unescapeText } from "./vcard.js";
-import { xmppAddress } from "./card.js";
+import { XMPP_PARAMS } from "./card.js";
 import { phoneNumber, writeNumber } from "./phone.js";
-import { jmpAddress, phoneChoices, DEFAULT_GATEWAY } from "./chat.js";
+import { jmpAddress, phoneChoices, hasChatAddress, DEFAULT_GATEWAY } from "./chat.js";
 
 /** The phone number a chat address stands for ("+15551234567@cheogram.com" -> "+15551234567"), or null. */
 export function phoneOfChatAddress(jid) {
@@ -46,8 +46,8 @@ export function linkToCard(vCard, jid) {
     if (!getAll(vcard, "TEL").some((p) => phoneNumber(unescapeText(p.value)) === link.e164)) {
       insertProp(vcard, makeProp("TEL", link.text, [{ key: "TYPE", value: "cell" }]), "N");
     }
-  } else if (!getAll(vcard, "IMPP").some((p) => xmppAddress(unescapeText(p.value)) === link.address)) {
-    insertProp(vcard, makeProp("IMPP", link.text), "EMAIL");
+  } else if (!hasChatAddress(vcard, link.address)) {
+    insertProp(vcard, makeProp("IMPP", link.text, XMPP_PARAMS), "EMAIL");
   }
   return serializeVCard(vcard);
 }
@@ -87,7 +87,8 @@ export function newCardFor(jid, name) {
 export function chatRows(cards, { has = null, gateway = DEFAULT_GATEWAY } = {}) {
   const rows = [];
   for (const card of cards) {
-    const addresses = [...new Set(card.chat.filter((c) => c.kind === "xmpp").map((c) => c.address))];
+    // Every chat address the card has, however it's written (a Google x-apple: one too), so none is added twice.
+    const addresses = [...new Set(card.chat.map((c) => c.address))];
     const choice = phoneChoices(card)[0];
     if (!addresses.length && !card.phones.length) {
       continue;

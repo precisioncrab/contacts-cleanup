@@ -160,6 +160,59 @@ export function change(from, to, replaced = true) {
 
 export const tag = (text, kind = "") => h("span", { class: `tag${kind ? ` ${kind}` : ""}` }, text);
 
+/*
+ * Long lists draw only the rows on screen (and a few around them), so a page
+ * with thousands of contacts answers a click as fast as one with ten. Every
+ * row is taken to be as tall as the first one drawn; scrolling redraws just
+ * the list. Where each list was scrolled to is kept, so a redraw of the page
+ * comes back to the same place.
+ */
+const scrollTops = new Map();
+const rowHeights = new Map();
+const EXTRA_ROWS = 12;
+
+/** A scrolling list of `items`, each drawn by `draw(item)`; `empty` shows when there are none. */
+export function virtualList(key, items, draw, { empty = null } = {}) {
+  const list = h("div", { class: "list", "data-scroll": key });
+  if (!items.length) {
+    list.append(...[empty].flat().filter(Boolean));
+    return list;
+  }
+  const above = h("div", { "aria-hidden": "true" });
+  const rows = h("div");
+  const below = h("div", { "aria-hidden": "true" });
+  let drawn = "";
+  const paint = () => {
+    const rowHeight = rowHeights.get(key) ?? 46;
+    const top = list.isConnected ? list.scrollTop : (scrollTops.get(key) ?? 0);
+    const height = list.clientHeight || window.innerHeight;
+    const start = Math.max(0, Math.floor(top / rowHeight) - EXTRA_ROWS);
+    const end = Math.min(items.length, Math.ceil((top + height) / rowHeight) + EXTRA_ROWS);
+    if (`${start}:${end}` === drawn) {
+      return;
+    }
+    drawn = `${start}:${end}`;
+    above.style.height = `${start * rowHeight}px`;
+    below.style.height = `${(items.length - end) * rowHeight}px`;
+    rows.replaceChildren(...items.slice(start, end).map(draw));
+    // The first time a row is on screen, its real height replaces the guess.
+    const first = rows.firstElementChild;
+    if (list.isConnected && !rowHeights.has(key) && first?.offsetHeight) {
+      rowHeights.set(key, first.offsetHeight);
+      drawn = "";
+      paint();
+    }
+  };
+  list.addEventListener("scroll", () => {
+    scrollTops.set(key, list.scrollTop);
+    paint();
+  });
+  list.append(above, rows, below);
+  paint();
+  requestAnimationFrame(paint);
+  return list;
+}
+
 export function emptyState(big, text) {
   return h("div", { class: "empty-state" }, h("div", { class: "big" }, big), text);
 }
