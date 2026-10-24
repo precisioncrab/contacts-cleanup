@@ -12,6 +12,8 @@
  *   dismissed  duplicate pairs marked "Not duplicates"
  *   generated  { <card id>: [chat addresses this add-on wrote] }
  *   history    applied changes, newest first (src/core/history.js)
+ *   links      linked copies of a contact, [[card id, ...]] (src/core/copies.js)
+ *   copiesLeft contacts in several address books left as they are (UIDs)
  */
 
 import { h, fill, plural } from "./dom.js";
@@ -27,8 +29,12 @@ import { phoneFixes, proposeName } from "../core/fixes.js";
 import { prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
 import { applyChanges, undoEntry, addEntry } from "../core/history.js";
+import { partnersOf, pruneLinks, followEdit } from "../core/copies.js";
+import { comparable } from "../core/vcard.js";
 import contacts, { allLabels } from "./views/contacts.js";
 import duplicates from "./views/duplicates.js";
+import copies from "./views/copies.js";
+import labelsView from "./views/labels.js";
 import phones from "./views/phones.js";
 import names from "./views/names.js";
 import chat from "./views/chat.js";
@@ -36,7 +42,7 @@ import changesView from "./views/history.js";
 import about from "./views/about.js";
 import { refreshOmemo } from "./omemo-state.js";
 
-const VIEWS = { contacts, duplicates, phones, names, chat, history: changesView, about };
+const VIEWS = { contacts, duplicates, copies, phones, names, labels: labelsView, chat, history: changesView, about };
 
 // Pages that were renamed or merged, for old links.
 const VIEW_ALIASES = { chatContacts: "chat", fixes: "chat", addresses: "chat" };
@@ -49,11 +55,18 @@ const state = {
   loading: true,
   loadError: null,
   books: [],
+  // Every card in the writable address books (`cards`: those in the books checked in the sidebar).
+  allCards: [],
   cards: [],
   settings: { ...DEFAULT_SETTINGS },
   dismissed: new Set(),
   generated: {},
   history: [],
+  links: [],
+  copiesLeft: new Set(),
+  // In several books: the choice in each box, and whether the ones left as is show.
+  copiesChoice: new Map(),
+  copiesShowLeft: false,
   selected: null,
   search: "",
   busy: null,
@@ -95,6 +108,8 @@ const ctx = {
   dismiss,
   apply,
   undo,
+  saveLinks,
+  leaveCopies,
   confirm: (options) => confirmDialog(options),
   toast: (text, options) => toast(text, options),
 };
@@ -136,11 +151,10 @@ async function markShadowed() {
     }
   }
   const bookName = (id) => state.books.find((b) => b.id === id)?.name ?? "another address book";
-  for (const card of state.cards) {
+  for (const card of state.allCards) {
     const target = reachable.get(card.uid);
     card.shadowed = target !== undefined && target !== card.parentId ? bookName(target) : null;
   }
-  state.shadowedCount = state.cards.filter((c) => c.shadowed).length;
 }
 
 /** "Not duplicates" pairs saved by 0.1.16 and older name cards by UID only; they now name each copy. */
@@ -174,12 +188,21 @@ async function reload() {
   const damaged = state.books.filter((b) => !b.readOnly && !b.remote).flatMap((b) => b.contacts).filter((c) => c.junk > 0);
   state.junk = { cards: damaged.length, fields: damaged.reduce((n, c) => n + c.junk, 0), ids: damaged.map((c) => c.id) };
   const excluded = new Set(state.settings.excludedBooks);
-  state.cards = state.books
-    .filter((book) => !book.readOnly && !book.remote && !excluded.has(book.id))
+  state.allCards = state.books
+    .filter((book) => !book.readOnly && !book.remote)
     .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => ({ ...readCard(node, book.name), uid: node.uid })))
     .sort((a, b) => label(a).localeCompare(label(b)));
+  state.cards = state.allCards.filter((c) => !excluded.has(c.parentId));
   await markShadowed();
   upgradeDismissed();
+  // Links to a card that's gone (deleted, or moved to another address book) go too.
+  if (!state.loadError) {
+    const exists = new Set(state.allCards.map((c) => c.id));
+    const links = pruneLinks(state.links, (id) => exists.has(id));
+    if (JSON.stringify(links) !== JSON.stringify(state.links)) {
+      await saveLinks(links, false);
+    }
+  }
   const ids = new Set(state.cards.map((c) => c.id));
   for (const map of [state.nameEdits, state.nameOn, state.drafts]) {
     for (const id of map.keys()) {
@@ -222,6 +245,55 @@ async function dismiss(pairs) {
   render();
 }
 
+async function saveLinks(links, redraw = true) {
+  state.links = links;
+  await browser.storage.local.set({ links });
+  if (redraw) {
+    render();
+  }
+}
+
+/** Marks contacts in several address books as left as they are (or asks about them again). */
+async function leaveCopies(uids, left) {
+  for (const uid of uids) {
+    state.copiesLeft[left ? "add" : "delete"](uid);
+  }
+  await browser.storage.local.set({ copiesLeft: [...state.copiesLeft] });
+  state.selected = null;
+  render();
+}
+
+/**
+ * The changes with the same edit made to each linked copy of a changed
+ * card (src/core/copies.js), unless the change says `only`. A copy that's
+ * changed by the changes themselves, or that Thunderbird doesn't let
+ * add-ons reach, is left to them.
+ */
+function withLinkedCopies(changes) {
+  if (!state.links.length) {
+    return changes;
+  }
+  const touched = new Set(changes.map((c) => c.id).filter(Boolean));
+  const more = [];
+  for (const change of changes) {
+    if (change.type !== "update" || change.only) {
+      continue;
+    }
+    for (const id of partnersOf(state.links, change.id)) {
+      const copy = state.allCards.find((c) => c.id === id);
+      if (!copy || copy.shadowed || touched.has(id)) {
+        continue;
+      }
+      const vCard = followEdit(copy.vCard, change.vCard);
+      if (comparable(vCard) !== comparable(copy.vCard)) {
+        touched.add(id);
+        more.push({ type: "update", id, vCard, label: `${change.label} (linked copy in ${copy.bookName})` });
+      }
+    }
+  }
+  return [...changes, ...more];
+}
+
 /** Records chat addresses written (+1) or taken off (-1) by this add-on. */
 function trackGenerated(generated, direction) {
   const add = (id, address) => {
@@ -242,22 +314,28 @@ function trackGenerated(generated, direction) {
 }
 
 /**
- * Applies changes to cards (src/core/history.js), records them for undo,
- * and offers Undo. `extra.generated` is { added, removed } chat addresses.
+ * Applies changes to cards (src/core/history.js), and to their linked
+ * copies, records them for undo, and offers Undo. `extra.generated` is
+ * { added, removed } chat addresses; `extra.onDone(results, entry)` runs
+ * before the address books are read again.
  * Returns the history entry, or null when nothing was changed.
  */
 async function apply(title, changes, extra = {}) {
   if (!changes.length || state.busy) {
     return null;
   }
+  changes = withLinkedCopies(changes);
   applying = true;
   state.busy = { done: 0, total: changes.length };
   render();
-  const { entry, error } = await applyChanges(api, title, changes, (done, total) => {
+  const { entry, error, results } = await applyChanges(api, title, changes, (done, total) => {
     state.busy = { done, total };
     renderProgress();
   });
-  if (entry.cards.length) {
+  if (extra.onDone) {
+    await extra.onDone(results, entry);
+  }
+  if (entry.cards.length || entry.lists?.length) {
     if (extra.generated) {
       const done = new Set(entry.cards.map((c) => c.id));
       entry.generated = {
@@ -277,7 +355,7 @@ async function apply(title, changes, extra = {}) {
   } else {
     toast(`${title}.`, { entry });
   }
-  return entry.cards.length ? entry : null;
+  return entry.cards.length || entry.lists?.length ? entry : null;
 }
 
 async function undo(entry) {
@@ -413,7 +491,7 @@ function menus() {
       items: [
         view("contacts"),
         { separator: true },
-        view("duplicates"), view("phones"), view("names"),
+        view("duplicates"), view("copies"), view("phones"), view("names"), view("labels"),
         { separator: true },
         view("chat"),
         { separator: true },
@@ -530,7 +608,7 @@ function renderSidebar() {
           h("span", { class: "count" }, locked ? "read-only" : String(book.contacts.length)));
       })),
       labels.length ? category("labels", "Labels", labels.map(labelItem)) : null,
-      category("cleanup", "Clean up", [item("duplicates"), item("phones"), item("names")]),
+      category("cleanup", "Clean up", [item("duplicates"), item("copies"), item("phones"), item("names"), item("labels")]),
       category("chat", "Chat", [item("chat"), omemoItem()]),
       category("more", "More", [item("history"), item("about")])),
     h("div", { class: "sidebar-footer" }, "Nothing changes until you apply or save it, and every change can be undone."));
@@ -720,11 +798,13 @@ window.addEventListener("hashchange", () => {
 });
 
 (async () => {
-  const stored = await browser.storage.local.get(["settings", "dismissed", "generated", "history"]);
+  const stored = await browser.storage.local.get(["settings", "dismissed", "generated", "history", "links", "copiesLeft"]);
   state.settings = { ...DEFAULT_SETTINGS, ...stored.settings };
   state.dismissed = new Set(stored.dismissed ?? []);
   state.generated = stored.generated ?? {};
   state.history = stored.history ?? [];
+  state.links = stored.links ?? [];
+  state.copiesLeft = new Set(stored.copiesLeft ?? []);
   initTheme(state.settings.theme);
   onPhotosLoaded(render);
   const hash = location.hash.slice(1);

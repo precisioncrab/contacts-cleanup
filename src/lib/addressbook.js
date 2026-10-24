@@ -53,7 +53,17 @@ function contactOf(node) {
   };
 }
 
-/** Every address book with its cards: [{ id, name, readOnly, remote, contacts: [contact] }]. */
+/** A mailing list as the rest of the add-on uses it: { id, parentId, name, nickName, description, members: [UID] }. */
+const listOf = (node, parentId) => ({
+  id: node.id,
+  parentId,
+  name: node.name ?? "",
+  nickName: node.nickName ?? "",
+  description: node.description ?? "",
+  members: (node.contacts ?? []).map((c) => c.id),
+});
+
+/** Every address book with its cards and mailing lists: [{ id, name, readOnly, remote, contacts: [contact], lists: [list] }]. */
 export async function loadBooks() {
   const books = await browser.addressBooks.list(true);
   return books.map((book) => ({
@@ -62,6 +72,7 @@ export async function loadBooks() {
     readOnly: Boolean(book.readOnly),
     remote: Boolean(book.remote),
     contacts: (book.contacts ?? []).map(contactOf).filter((c) => typeof c.vCard === "string"),
+    lists: (book.mailingLists ?? []).map((list) => listOf(list, book.id)),
   }));
 }
 
@@ -131,6 +142,48 @@ export const api = {
     await contacts().setPhoto(splitKey(key).uid, new File([blob], `photo.${type.split("/")[1] ?? "jpg"}`, { type }));
   },
   /**
+   * The mailing lists of the card's own address book it's a member of
+   * (ids). A list holds cards of its own book, named by UID.
+   */
+  async listsOf(key) {
+    const { book, uid } = splitKey(key);
+    const lists = book ? await browser.mailingLists.list(book).catch(() => []) : [];
+    const ids = [];
+    for (const list of lists) {
+      const members = await browser.mailingLists.listMembers(list.id).catch(() => []);
+      if (members.some((m) => m.id === uid)) {
+        ids.push(list.id);
+      }
+    }
+    return ids;
+  },
+  /** Adds a card to a mailing list of its address book; false when the list is gone. */
+  async addToList(listId, key) {
+    try {
+      await browser.mailingLists.get(listId);
+    } catch {
+      return false;
+    }
+    await browser.mailingLists.addMember(listId, splitKey(key).uid);
+    return true;
+  },
+  /** A mailing list as { id, parentId, name, nickName, description, members: [card id] }, or null. */
+  async getList(id) {
+    try {
+      const node = await browser.mailingLists.get(id);
+      const members = await browser.mailingLists.listMembers(id);
+      return { ...listOf(node, node.parentId), members: members.map((m) => cardKey(node.parentId, m.id)) };
+    } catch {
+      return null;
+    }
+  },
+  async createList(parentId, { name, nickName = "", description = "" }) {
+    return browser.mailingLists.create(parentId, { name, nickName, description });
+  },
+  async deleteList(id) {
+    return browser.mailingLists.delete(id);
+  },
+  /**
    * Clears a card's leftover properties (the bug above) and saves it again
    * as it is: its vCard doesn't change. Returns how many were cleared.
    */
@@ -159,9 +212,11 @@ export function onAddressBookChange(listener, wait = 600) {
     clearTimeout(timer);
     timer = setTimeout(listener, wait);
   };
+  const lists = browser.mailingLists ?? {};
   const events = [
     contacts().onCreated, contacts().onUpdated, contacts().onDeleted, contacts().onManyCreated,
     browser.addressBooks.onCreated, browser.addressBooks.onUpdated, browser.addressBooks.onDeleted,
+    lists.onCreated, lists.onUpdated, lists.onDeleted, lists.onMemberAdded, lists.onMemberRemoved,
   ].filter(Boolean);
   for (const event of events) {
     event.addListener(fire);

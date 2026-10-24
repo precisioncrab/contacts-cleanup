@@ -206,7 +206,7 @@ function contactsTab(ctx) {
     virtualList("chat-contacts", rows, (r) => row(ctx, {
           key: r.card.id,
           muted: !r.addresses.length && !r.jmp,
-          check: { checked: sel.has(r.card.id), disabled: Boolean(r.card.shadowed), title: r.card.shadowed ? `Thunderbird only lets add-ons change the copy in ${r.card.shadowed}` : "Select", onChange: (value) => {
+          check: { checked: sel.has(r.card.id), disabled: Boolean(r.card.shadowed), title: r.card.shadowed ? `Thunderbird only lets add-ons change the copy in ${r.card.shadowed}. Sort them out under In several books.` : "Select", onChange: (value) => {
             sel[value ? "add" : "delete"](r.card.id);
             ctx.render();
           } },
@@ -219,7 +219,7 @@ function contactsTab(ctx) {
                 ? [change(r.number, r.jmp, false), tag("no chat address yet", "plain")]
                 : h("span", {}, `${r.number}: no country code, so no JMP.chat address (see Phone numbers)`),
             r.fix ? tag("to fix", "warn") : null,
-            r.card.shadowed ? tag(`can't change: same ID as in ${r.card.shadowed}`, "warn") : null,
+            r.card.shadowed ? tag(`also in ${r.card.shadowed}: can't change this copy`, "warn") : null,
             // The accounts whose chat list the person is on.
             r.on.map((account) => h("span", { class: "tag", title: `On the chat list of ${account}` }, accountLabel(account))),
           ],

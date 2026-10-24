@@ -1,0 +1,33 @@
+BEGIN:VCARD
+VERSION:4.0
+FN:Emily Example
+N:Example;Emily;;;
+TEL;TYPE=cell:+1 555 239 7908
+EMAIL:emily.example@example.org
+IMPP;X-SERVICE-TYPE=Jabber:xmpp:+15552397908@cheogram.com
+UID:c1ea0000-0000-4000-8000-000000000001
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+FN:Kim Sample
+N:Sample;Kim;;;
+TEL;TYPE=cell:+1 302 555 5872
+EMAIL:kim.sample@example.org
+UID:c1ea0000-0000-4000-8000-000000000002
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+FN:Erin Test
+N:Test;Erin;;;
+TEL;TYPE=cell:+1 484 555 9897
+EMAIL:erin.test@example.org
+NOTE:Met at the fair
+UID:c1ea0000-0000-4000-8000-000000000003
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+FN:Gus Guest
+N:Guest;Gus;;;
+EMAIL:gus.guest@example.org
+UID:c1ea0000-0000-4000-8000-000000000004
+END:VCARD

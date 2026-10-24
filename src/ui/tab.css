@@ -557,3 +557,13 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 .account-group:first-child { margin-top: 4px; }
 .account-heading { margin: 0 0 6px; font-size: 14px; }
 .account-heading span { font-weight: normal; font-size: 12px; color: var(--text-meta); }
+
+/* ---------- In several books ---------- */
+.copies-box { margin: 10px 16px 0; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-card); }
+.copies-box-title { font-size: 12px; color: var(--text-2); margin-bottom: 8px; }
+.copies-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12px; color: var(--text-2); }
+.copies-controls label { display: flex; align-items: center; gap: 6px; }
+.copies-controls select, .copies-controls input[type="text"] { background: var(--bg-control); padding: 3px 8px; color: var(--text); max-width: 100%; min-width: 0; font-size: 12px; }
+.detail-panel .copies-controls { flex-direction: column; align-items: stretch; }
+.detail-panel .copies-controls button { padding: 7px 10px; }
+.detail-panel .cp-hint { font-size: 11px; color: var(--text-muted); margin: 4px 0 0; line-height: 1.45; }

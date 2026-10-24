@@ -14,6 +14,10 @@ Contacts Cleanup tidies Thunderbird's address book and gets your contacts ready 
 
 **Duplicates.** Finds cards that look like the same person: the same email address, the same phone number in any format, the same chat address, or the same name, across all your address books. You check the cards that are really the same person, pick the card to keep and what it keeps (and rename it if you like), and click Merge; every value starts checked, so nothing is lost unless you uncheck it. A card you don't want at all can just be deleted.
 
+**The same contact in several address books.** A contact copied into another address book with its contact ID can only be changed in one of the copies by add-ons. Contacts Cleanup lists them and lets you choose: link the copies (they get the same details, and an edit to one is made to the others), keep one copy (the other address books become labels on it), separate them, or leave them.
+
+**Address books and mailing lists to labels.** Turns an address book or a mailing list into a label on its contacts, which syncs with them; an address book's contacts can then move into another address book.
+
 **Phone numbers in one format.** +1 555 123 4567, or compact +15551234567. Numbers without a country code are read as US and Canada, or another country you pick. Numbers with an extension are left alone.
 
 **Missing names.** Cards without a display name get one from the first and last name, the organization, the nickname or the email address, and you can change each before applying.
@@ -43,7 +47,7 @@ Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
 - Screenshots to take (made-up cards): Duplicates list, the merge page, Phone numbers, the Chat page with the help panel, one in light and one in dark.
 
 ## Notes for the reviewer
-Contacts Cleanup is a Manifest V2 add-on using only the addressBooks, contacts, menus, spaces and storage APIs (V2 because Thunderbird 158's V3 contacts.update and create store every character of the vCard as a custom property on the card). Changes are written with contacts.update and create ({ vCard }), always after the user clicks Apply or Save; each card's previous vCard is kept in storage.local for undo. The Chat page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
+Contacts Cleanup is a Manifest V2 add-on using only the addressBooks, contacts, mailingLists, menus, spaces and storage APIs (V2 because Thunderbird 158's V3 contacts.update and create store every character of the vCard as a custom property on the card). Changes are written with contacts.update and create ({ vCard }), always after the user clicks Apply or Save; each card's previous vCard is kept in storage.local for undo. The Chat page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on.
 
 ## Open (maintainer)
 - The Chat page and this description point to OMEMO for Thunderbird, which is installed from file and needs `xpinstall.signatures.required` turned off. A reviewer could object to sending people toward an unsigned add-on. Our text never mentions turning signatures off; that's on the OMEMO page itself. If a reviewer objects, the fallback is to drop the link from the listing and keep the in-app page.

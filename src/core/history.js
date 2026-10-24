@@ -20,12 +20,96 @@
  * in Thunderbird, or by a sync) is a conflict: undo stops and asks, and
  * goes ahead only when told to.
  *
+ * A deleted card also keeps the mailing lists it was in (`lists`), and
+ * undo puts the card back in them. A deleted mailing list is kept in
+ * entry.lists ({ parentId, name, nickName, description, members }) and
+ * undo makes it again with its members.
+ *
  * `api` is the address book (src/lib/addressbook.js, or a fake in tests):
  * get(id) -> node|null, update(id, vCard), create(parentId, vCard) -> id,
- * remove(id), photo(id) -> dataUrl|null, setPhoto(id, dataUrl).
+ * remove(id), photo(id) -> dataUrl|null, setPhoto(id, dataUrl); and for
+ * mailing lists, when it has them: listsOf(id) -> [list id],
+ * addToList(listId, id), getList(id), createList(parentId, list) -> id,
+ * deleteList(id).
  */
 
-import { comparable, parseVCard, serializeVCard, photoLines, withoutPhoto, withPhoto } from "./vcard.js";
+import { comparable, parseVCard, parseLine, serializeVCard, insertProp, photoLines, withoutPhoto, withPhoto } from "./vcard.js";
+
+/** The vCard without its UID line, so Thunderbird gives the card a new one. */
+export function withoutUid(vCard) {
+  const vcard = parseVCard(vCard);
+  vcard.props = vcard.props.filter((p) => p.name !== "UID");
+  return serializeVCard(vcard);
+}
+
+/** The vCard with this UID (Thunderbird refuses an update that changes a card's UID). */
+export function withUid(vCard, uid) {
+  const vcard = parseVCard(withoutUid(vCard));
+  insertProp(vcard, parseLine(`UID:${uid}`));
+  return serializeVCard(vcard);
+}
+
+/** Deletes a card, recording it (with its photo and mailing lists) for undo. */
+async function deleteCard(api, entry, node, label) {
+  const photo = photoLines(node.vCard) ? null : await api.photo(node.id).catch(() => null);
+  const lists = api.listsOf ? await api.listsOf(node.id).catch(() => []) : [];
+  await api.remove(node.id);
+  entry.cards.push({ id: node.id, parentId: node.parentId, label, before: node.vCard, after: null, photo, ...(lists.length ? { lists } : {}) });
+}
+
+/**
+ * The same contact in several address books with one UID: Thunderbird lets
+ * add-ons reach one copy at a time (src/lib/addressbook.js). `change.want`
+ * says what each copy becomes, by address book id: a vCard, or null to
+ * delete that copy; a copy whose book isn't named stays as it is. Each copy
+ * Thunderbird reaches is dealt with in turn: deleted, or (while others
+ * still share its UID) made again in its book with a new UID, in the same
+ * mailing lists; that lets Thunderbird reach the next one. The last copy
+ * left keeps the UID and is updated. Returns the card ids the copies have
+ * afterwards.
+ */
+async function sortCopies(api, entry, change) {
+  const left = new Set(change.books);
+  const ids = [];
+  for (let step = 0; step <= change.books.length && left.size; step++) {
+    const node = await api.get(change.uid);
+    if (!node) {
+      break;
+    }
+    if (!left.has(node.parentId)) {
+      throw new Error(`"${change.label}" has a copy in an address book this change doesn't cover. Nothing more was changed.`);
+    }
+    left.delete(node.parentId);
+    const want = node.parentId in change.want ? change.want[node.parentId] : node.vCard;
+    if (want === null) {
+      await deleteCard(api, entry, node, change.label);
+    } else if (left.size) {
+      const id = await api.create(node.parentId, withoutUid(want));
+      for (const list of api.listsOf ? await api.listsOf(node.id).catch(() => []) : []) {
+        await api.addToList(list, id).catch(() => false);
+      }
+      entry.cards.push({ id, parentId: node.parentId, label: change.label, before: null, after: (await api.get(id))?.vCard ?? want });
+      await deleteCard(api, entry, node, change.label);
+      ids.push(id);
+    } else {
+      if (comparable(want) !== comparable(node.vCard)) {
+        await updateCard(api, entry, node, withUid(want, change.uid), change.label);
+      }
+      ids.push(node.id);
+    }
+  }
+  return ids;
+}
+
+async function updateCard(api, entry, node, vCard, label) {
+  await api.update(node.id, vCard);
+  const saved = (await api.get(node.id))?.vCard ?? vCard;
+  const record = { id: node.id, parentId: node.parentId, label, before: node.vCard, after: saved };
+  if (photoLines(node.vCard) === photoLines(saved)) {
+    Object.assign(record, { before: withoutPhoto(node.vCard), after: withoutPhoto(saved), photoKept: true });
+  }
+  entry.cards.push(record);
+}
 
 export const HISTORY_LIMIT = 50;
 
@@ -33,45 +117,55 @@ const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).sli
 
 /**
  * Applies changes in order: [{ type: "update", id, vCard, label }],
- * [{ type: "delete", id, label }] or [{ type: "create", parentId, vCard,
- * label }]. Stops at the first failure, so a merge never deletes cards
- * after its kept card failed to save.
- * Returns { entry, error }: the entry holds what was done, even after a failure.
- * `onProgress(done, total)` is called after each card.
+ * [{ type: "delete", id, label }], [{ type: "create", parentId, vCard,
+ * label, lists }] (lists: mailing list ids to put the new card in),
+ * [{ type: "copies", uid, books, want, label }] (see sortCopies) or
+ * [{ type: "deleteList", listId, label }]. Stops at the first failure, so
+ * a merge never deletes cards after its kept card failed to save.
+ * Returns { entry, error, results }: the entry holds what was done, even
+ * after a failure; results[i] is what change i gave (a "copies" change: its
+ * card ids).
+ * `onProgress(done, total)` is called after each change.
  */
 export async function applyChanges(api, title, changes, onProgress = () => {}) {
   const entry = { id: newId(), time: Date.now(), title, cards: [], undone: false };
+  const results = [];
   try {
     for (const [i, change] of changes.entries()) {
       if (change.type === "create") {
         const id = await api.create(change.parentId, change.vCard);
+        for (const list of change.lists ?? []) {
+          await api.addToList(list, id).catch(() => false);
+        }
         const saved = (await api.get(id))?.vCard ?? change.vCard;
         entry.cards.push({ id, parentId: change.parentId, label: change.label, before: null, after: saved });
-        onProgress(i + 1, changes.length);
-        continue;
-      }
-      const node = await api.get(change.id);
-      if (!node) {
-        throw new Error(`"${change.label}" isn't in the address book any more.`);
-      }
-      if (change.type === "delete") {
-        const photo = photoLines(node.vCard) ? null : await api.photo(change.id).catch(() => null);
-        await api.remove(change.id);
-        entry.cards.push({ id: change.id, parentId: node.parentId, label: change.label, before: node.vCard, after: null, photo });
-      } else {
-        await api.update(change.id, change.vCard);
-        const saved = (await api.get(change.id))?.vCard ?? change.vCard;
-        const record = { id: change.id, parentId: node.parentId, label: change.label, before: node.vCard, after: saved };
-        if (photoLines(node.vCard) === photoLines(saved)) {
-          Object.assign(record, { before: withoutPhoto(node.vCard), after: withoutPhoto(saved), photoKept: true });
+        results.push(id);
+      } else if (change.type === "copies") {
+        results.push(await sortCopies(api, entry, change));
+      } else if (change.type === "deleteList") {
+        const list = await api.getList(change.listId);
+        if (list) {
+          await api.deleteList(change.listId);
+          entry.lists = [...(entry.lists ?? []), list];
         }
-        entry.cards.push(record);
+        results.push(null);
+      } else {
+        const node = await api.get(change.id);
+        if (!node) {
+          throw new Error(`"${change.label}" isn't in the address book any more.`);
+        }
+        if (change.type === "delete") {
+          await deleteCard(api, entry, node, change.label);
+        } else {
+          await updateCard(api, entry, node, change.vCard, change.label);
+        }
+        results.push(change.id);
       }
       onProgress(i + 1, changes.length);
     }
-    return { entry, error: null };
+    return { entry, error: null, results };
   } catch (e) {
-    return { entry, error: e?.message ?? String(e) };
+    return { entry, error: e?.message ?? String(e), results };
   }
 }
 
@@ -115,6 +209,14 @@ export async function undoEntry(api, entry, { force = false } = {}) {
     return { conflicts, done: false, error: null };
   }
   try {
+    // Deleted mailing lists come back first (empty), so cards brought back can join them.
+    const listIds = new Map();
+    for (const list of entry.lists ?? []) {
+      listIds.set(list.id, await api.createList(list.parentId, list));
+    }
+    // A card made again gets a new UID when its old one is taken (by a copy in
+    // another address book): its new id, for the lists of the cards after it.
+    const newIds = new Map();
     for (const card of [...entry.cards].reverse()) {
       const node = await api.get(card.id).catch(() => null);
       if (card.before === null) {
@@ -128,11 +230,20 @@ export async function undoEntry(api, entry, { force = false } = {}) {
           continue;
         }
         const id = await createWithFallback(api, card.parentId, card.before);
+        newIds.set(card.id, id);
         if (card.photo && id) {
           await api.setPhoto(id, card.photo).catch(() => {});
         }
+        for (const list of card.lists ?? []) {
+          await api.addToList(listIds.get(list) ?? list, id).catch(() => false);
+        }
       } else {
         await api.update(card.id, card.photoKept ? withPhoto(card.before, photoLines(node.vCard)) : card.before);
+      }
+    }
+    for (const list of entry.lists ?? []) {
+      for (const member of list.members) {
+        await api.addToList(listIds.get(list.id), newIds.get(member) ?? member).catch(() => false);
       }
     }
     return { conflicts, done: true, error: null };
@@ -141,14 +252,15 @@ export async function undoEntry(api, entry, { force = false } = {}) {
   }
 }
 
-/** Creates the card with its old UID (so it gets its old id back), or with a new one if Thunderbird refuses. */
+/**
+ * Creates the card with its old UID (so it gets its old id back), or with a
+ * new one if Thunderbird refuses (it refuses a UID any address book uses).
+ */
 async function createWithFallback(api, parentId, vCard) {
   try {
     return await api.create(parentId, vCard);
   } catch {
-    const vcard = parseVCard(vCard);
-    vcard.props = vcard.props.filter((p) => p.name !== "UID");
-    return api.create(parentId, serializeVCard(vcard));
+    return api.create(parentId, withoutUid(vCard));
   }
 }
 

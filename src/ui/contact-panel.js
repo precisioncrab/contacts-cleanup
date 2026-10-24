@@ -14,12 +14,18 @@
  * another contact and back keeps them. Saving is one change with undo;
  * moving a contact to another address book is a copy there and a delete
  * here (Thunderbird has no move for add-ons), undone together.
+ *
+ * A contact linked with its copies in other address books (In several
+ * books) says so: saving changes the copies too (src/ui/tab.js), unless
+ * "Save this copy only" is checked.
  */
 
 import { h } from "./dom.js";
 import { avatar } from "./parts.js";
 import { label as cardLabel, chatAddressOf } from "../core/card.js";
-import { comparable, parseVCard, serializeVCard } from "../core/vcard.js";
+import { comparable } from "../core/vcard.js";
+import { withoutUid } from "../core/history.js";
+import { partnersOf, unlink, followEdit, sameDetails } from "../core/copies.js";
 import { cardModel, modelToVCard, newContactVCard, emptyModel, PHONE_TYPES, EMAIL_TYPES, ADDRESS_TYPES } from "../core/card-model.js";
 import { jmpAddress, normalizeGateway, DEFAULT_GATEWAY } from "../core/chat.js";
 import { phoneNumber } from "../core/phone.js";
@@ -66,13 +72,6 @@ function isDirty(ctx, d, card) {
     return Boolean(m.fn || m.given || m.family || m.org || m.phones.length || m.emails.length || m.chats.length);
   }
   return d.book !== card.parentId || comparable(modelToVCard(card.vCard, d.model)) !== comparable(card.vCard);
-}
-
-/** The vCard without its UID, so Thunderbird gives the copy in the other address book a new one. */
-function withoutUid(vCard) {
-  const vcard = parseVCard(vCard);
-  vcard.props = vcard.props.filter((p) => p.name !== "UID");
-  return serializeVCard(vcard);
 }
 
 /**
@@ -122,7 +121,7 @@ async function save(ctx, card, d) {
     name = cardModel(vCard).fn || cardLabel(card);
     const changes = d.book !== card.parentId
       ? [{ type: "create", parentId: d.book, vCard: withoutUid(vCard), label: name }, { type: "delete", id: card.id, label: name }]
-      : comparable(vCard) !== comparable(card.vCard) ? [{ type: "update", id: card.id, vCard, label: name }] : [];
+      : comparable(vCard) !== comparable(card.vCard) ? [{ type: "update", id: card.id, vCard, label: name, only: Boolean(d.only) }] : [];
     if (changes.length) {
       entry = await ctx.apply(changes.length === 2 ? `Moved ${name} to ${bookName(d.book)}` : `Edited ${name}`, changes);
       if (!entry) {
@@ -152,6 +151,37 @@ async function remove(ctx, card) {
     ctx.state.selected = null;
     ctx.render();
   }
+}
+
+/** The contact's linked copies (cards), when it has any. */
+const linkedCopies = (ctx, card) => partnersOf(ctx.state.links, card.id).map((id) => ctx.state.allCards.find((c) => c.id === id)).filter(Boolean);
+
+/**
+ * Linked copies: where they are, "Save this copy only", Unlink, and (when
+ * a copy was changed elsewhere, in Thunderbird or by a sync) an offer to
+ * make the others match this one.
+ */
+function linkedNotice(ctx, card, d) {
+  const copies = linkedCopies(ctx, card);
+  if (!copies.length) {
+    return null;
+  }
+  const where = copies.map((c) => c.bookName).join(", ");
+  const differ = copies.filter((c) => !sameDetails(c.vCard, card.vCard));
+  return h("div", { class: "notice" },
+    `Linked with the copy in ${where}: saving changes ${copies.length > 1 ? "them" : "it"} too.`,
+    differ.length
+      ? h("div", {}, `The copy in ${differ.map((c) => c.bookName).join(", ")} differs (changed in Thunderbird or by a sync). `,
+        h("button", { class: "link", disabled: Boolean(ctx.state.busy), onClick: () => ctx.apply(`Copied ${cardLabel(card)} to its linked copies`, differ.map((c) => ({
+          type: "update", id: c.id, vCard: followEdit(c.vCard, card.vCard), label: `${cardLabel(card)} (linked copy in ${c.bookName})`, only: true,
+        }))) }, "Make it match this one"))
+      : null,
+    h("div", { class: "cp-line" },
+      h("label", { class: "cp-check" }, h("input", { type: "checkbox", checked: Boolean(d.only), onChange: (e) => {
+        d.only = e.target.checked;
+      } }), "Save this copy only"),
+      h("span", { class: "spacer" }),
+      h("button", { class: "link", onClick: () => ctx.saveLinks(unlink(ctx.state.links, card.id)) }, "Unlink")));
 }
 
 /**
@@ -231,8 +261,13 @@ export function contactPanel(ctx, card, { before = null } = {}) {
       : h("h3", {}, "New contact"),
     before,
     card?.shadowed
-      ? h("div", { class: "notice warn" }, `This contact is also in ${card.shadowed}, with the same contact ID. Thunderbird only lets add-ons change one of the two copies, the one in ${card.shadowed}, so this copy (in ${card.bookName}) can't be saved or deleted here. Change it in Thunderbird's Address Book, or open the copy in ${card.shadowed}.`)
+      ? h("div", { class: "notice warn" }, `This contact is also in ${card.shadowed}, with the same contact ID. Thunderbird only lets add-ons change one of the copies, the one in ${card.shadowed}, so this copy (in ${card.bookName}) can't be saved or deleted here. `,
+        h("button", { class: "link", onClick: () => {
+          ctx.setView("copies");
+          ctx.select(`copies:${card.uid}`);
+        } }, "Sort out the copies"))
       : null,
+    card && !card.shadowed ? linkedNotice(ctx, card, d) : null,
     card && d.touched && d.base !== card.vCard
       ? h("div", { class: "notice warn" }, "This contact changed in Thunderbird while you were editing it. Saving writes your changes over it. ",
         h("button", { class: "link", onClick: () => {
