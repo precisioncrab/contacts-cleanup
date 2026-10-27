@@ -126,7 +126,7 @@ async function listToLabel(ctx, book, list) {
       } }),
       h("label", { class: "choice" }, h("input", { type: "checkbox", onChange: (e) => {
         pick.remove = e.target.checked;
-      } }), "Then delete the mailing list (the contacts stay)"),
+      } }), `Then delete the mailing list. Only the list goes: its contacts stay in ${book.name}, with the label.`),
       h("p", { class: "hint" }, "Undo (the message after, or Changes) takes the label off and makes the list again with its members."),
     ],
     ok: "Make the label",
@@ -197,7 +197,7 @@ export default {
       h("h4", {}, "An address book"),
       h("p", {}, "Every contact in it gets the label. Then they stay where they are, or move into another address book: one that's already there with the same contact ID is combined with that copy, not copied twice."),
       h("h4", {}, "A mailing list"),
-      h("p", {}, "Its members get the label. The list can be deleted afterwards; the contacts stay."),
+      h("p", {}, "Its members get the label. The list can be deleted afterwards: a mailing list only points at contacts in its address book, so deleting it leaves every contact where it is, now with the label."),
       h("p", {}, "Contacts that share a contact ID with another address book can't be changed here until they're sorted out under In several books."),
       h("p", {}, "Undo puts it all back, mailing lists included."),
     ];
