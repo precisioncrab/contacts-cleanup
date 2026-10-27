@@ -1,6 +1,6 @@
 {
   "name": "contacts-cleanup",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "private": true,
   "description": "A Thunderbird add-on that cleans up the address book and adds XMPP chat addresses to contact cards.",
   "license": "MPL-2.0",

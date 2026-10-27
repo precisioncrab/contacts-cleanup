@@ -2,6 +2,14 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; pick only the test books in the sidebar (click one, Ctrl+click another; from 0.1.22) until the test cards behave._
 
+## 0.1.24: In several books, one contact at a time
+
+From your Daynizer test (2026-10-27). Install `contacts-cleanup/dist/contacts-cleanup-0.1.24.xpi` over 0.1.23.
+
+1. **Clean up > In several books with nothing selected:** the box at the top is for every contact listed ("Apply to N").
+2. **Click one contact:** the box now names that contact and its button says "Apply" (just that one); "Or choose for all N at once" goes back. The right-hand panel has the same choice.
+3. **Delete Thunderbird's built-in Collected Addresses or Personal Address Book (right-click):** it's refused with a message saying Thunderbird never deletes those two, and nothing changes.
+
 ## 0.1.23: move a mailing list's members, delete lists and address books
 
 From your Daynizer test (2026-10-27, the same changes went into Daynizer's copy). Install `contacts-cleanup/dist/contacts-cleanup-0.1.23.xpi` over 0.1.22. Use a test address book with a test mailing list.
