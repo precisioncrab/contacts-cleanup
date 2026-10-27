@@ -144,7 +144,11 @@ async function bookToLabel(ctx, book) {
 
 async function listToLabel(ctx, book, list) {
   const others = writable(ctx).filter((b) => b.id !== book.id);
-  const pick = { label: list.name, remove: false, move: false, target: others[0]?.id ?? null };
+  // after: "keep" (members stay, the list too), "delete" (members stay, the list goes) or "move" (into `target`; the list goes).
+  const pick = { label: list.name, after: "keep", target: others[0]?.id ?? null };
+  const choice = (after, ...text) => h("label", { class: "choice" }, h("input", { type: "radio", name: "after", checked: after === "keep", onChange: () => {
+    pick.after = after;
+  } }), ...text);
   const members = cardsIn(ctx, book.id).filter((c) => list.members.includes(c.uid));
   const go = await ctx.confirm({
     title: `Make the list ${list.name} a label?`,
@@ -153,10 +157,14 @@ async function listToLabel(ctx, book, list) {
       h("input", { type: "text", style: { width: "100%" }, value: pick.label, onInput: (e) => {
         pick.label = e.target.value;
       } }),
-      ...afterChoice(pick, `Leave them in ${book.name}`, others),
-      h("label", { class: "choice" }, h("input", { type: "checkbox", onChange: (e) => {
-        pick.remove = e.target.checked;
-      } }), "And delete the mailing list. Only the list goes, never the contacts in it."),
+      h("p", {}, "Then:"),
+      choice("keep", `Leave them in ${book.name}, and keep the list`),
+      choice("delete", `Leave them in ${book.name}, and delete the list (only the list goes, never its contacts)`),
+      others.length
+        ? choice("move", "Move them into ", h("select", { onChange: (e) => {
+          pick.target = e.target.value;
+        } }, others.map((b) => h("option", { value: b.id }, b.name))), " and delete the list")
+        : null,
       h("p", { class: "hint" }, `Moving: each member is made in the address book you pick, with the label (and the names of ${book.name}'s other mailing lists it's in, as labels), and taken out of ${book.name}. A contact that's already there with the same contact ID is combined with that copy instead of copied twice.`),
       h("p", { class: "hint" }, "Undo (the message after, or Changes) puts it all back: the contacts where they were, the list with its members."),
     ],
@@ -165,23 +173,38 @@ async function listToLabel(ctx, book, list) {
   if (!go || !pick.label.trim()) {
     return;
   }
-  const labelsFor = (card) => [...new Set([pick.label.trim(), ...(pick.move ? listLabels(book, card) : [])])];
-  const { changes, skipped } = pick.move && pick.target
+  const move = pick.after === "move" && Boolean(pick.target);
+  const remove = pick.after !== "keep";
+  const labelsFor = (card) => [...new Set([pick.label.trim(), ...(move ? listLabels(book, card) : [])])];
+  const { changes, skipped } = move
     ? { changes: moveChanges(ctx, members, pick.target, labelsFor), skipped: 0 }
     : labelChanges(members, labelsFor);
-  if (pick.remove) {
+  if (remove) {
     changes.push({ type: "deleteList", listId: list.id, label: list.name });
   }
   if (!changes.length) {
     ctx.toast(skipped ? `Nothing labeled: ${plural(skipped, "member shares", "members share")} a contact ID with another address book. Sort them out under In several books first.` : `Every member has that label already.`, { error: Boolean(skipped) });
     return;
   }
-  const done = pick.move && pick.target
+  const done = move
     ? `Moved the list ${list.name}'s members into ${bookName(ctx, pick.target)} with the label ${pick.label.trim()}`
     : `Labeled the list ${list.name}'s members ${pick.label.trim()}`;
-  const entry = await ctx.apply(`${done}${pick.remove ? " and deleted the list" : ""}`, changes);
+  const entry = await ctx.apply(`${done}${remove ? " and deleted the list" : ""}`, changes);
   if (entry && skipped) {
     ctx.toast(`Done, except ${plural(skipped, "member", "members")} that share a contact ID with another address book. Sort them out under In several books, then make the label again.`);
+  }
+}
+
+/** Right-click on a mailing list: delete it (its contacts stay; Undo makes it again with its members). */
+async function deleteList(ctx, book, list) {
+  const go = await ctx.confirm({
+    title: `Delete the mailing list ${list.name}?`,
+    body: [h("p", {}, `Only the list goes: its ${plural(list.members.length, "member stays", "members stay")} in ${book.name}. Undo (the message after, or Changes) makes it again with its members.`)],
+    ok: "Delete",
+    danger: true,
+  });
+  if (go) {
+    await ctx.apply(`Deleted the mailing list ${list.name}`, [{ type: "deleteList", listId: list.id, label: list.name }]);
   }
 }
 
@@ -200,7 +223,7 @@ export default {
     ]);
     return [
       toolbar(ctx, { title: "Address books and mailing lists to labels", search: false }),
-      h("div", { class: "toolbar-filters" }, h("span", {}, "A label stays with a contact wherever it goes, and syncs with it (Google, CardDAV; phones show labels as groups). An address book or mailing list only holds contacts of its own book.")),
+      h("div", { class: "toolbar-filters" }, h("span", {}, "A label stays with a contact wherever it goes, and syncs with it (Google, CardDAV; phones show labels as groups). An address book or mailing list only holds contacts of its own book. Right-click a mailing list to delete it.")),
       h("div", { class: "list", "data-scroll": "labels" },
         rows.length
           ? rows.map(({ key, book, list }) => row(ctx, {
@@ -210,6 +233,7 @@ export default {
               ? [h("span", {}, `mailing list in ${book.name}`), h("span", {}, plural(list.members.length, "member", "members"))]
               : [h("span", {}, "address book"), h("span", {}, plural(book.contacts.length, "contact", "contacts")), book.lists?.length ? h("span", {}, plural(book.lists.length, "mailing list", "mailing lists")) : null],
             actions: [h("button", { disabled: Boolean(ctx.state.busy) || (list ? !list.members.length : !book.contacts.length), onClick: () => (list ? listToLabel(ctx, book, list) : bookToLabel(ctx, book)) }, "Make a label…")],
+            onContextMenu: list && !ctx.state.busy ? () => deleteList(ctx, book, list) : null,
           }))
           : emptyState("No address books to change.", "")),
     ];
