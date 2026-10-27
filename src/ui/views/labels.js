@@ -145,9 +145,8 @@ async function bookToLabel(ctx, book) {
   if (entry && pick.move && pick.deleteBook) {
     // Only an address book the move emptied goes (a contact that couldn't be moved keeps it).
     const now = ctx.state.books.find((b) => b.id === book.id);
-    if (now && now.contacts.length) {
-      ctx.toast(`${book.name} wasn't deleted: ${plural(now.contacts.length, "contact is", "contacts are")} still in it.`, { error: true });
-    } else if (now) {
+    // When the move stopped partway, ctx.apply's message says why; it stays on screen.
+    if (now && !now.contacts.length) {
       await ctx.deleteBook(now, { asked: true });
     }
   }
