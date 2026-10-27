@@ -2,6 +2,28 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; pick only the test books in the sidebar (click one, Ctrl+click another; from 0.1.22) until the test cards behave._
 
+## Quick run before the ATN submission (about 10 minutes, 0.1.24)
+
+Made-up cards only: `docs/test-cards/Demo Contacts.vcf` (12 cards) and `Demo Work.vcf` (6 cards), the same people as the listing's screenshots.
+
+**Set up (once):**
+1. Install `contacts-cleanup/dist/contacts-cleanup-0.1.24.xpi` (Add-ons and Themes > gear > Install Add-on From File).
+2. Import both files into Thunderbird (Tools > Import > Address Books > vCard file, one file at a time). Each becomes its own address book, named after the file: **Demo Contacts** and **Demo Work**.
+3. In Thunderbird's Address Book, select Demo Contacts and make a mailing list **Party** with Jane Doe, Priya Shah and Tom Ashby (New List).
+
+**Run, in Contacts Cleanup:**
+1. **Sidebar:** click **Demo Contacts**: its 12 contacts. Ctrl+click **Demo Work**: both books (18). Keep both picked for the rest.
+2. **Duplicates:** Jane D and Jane Doe, Bob Miller and Robert Miller, the two Dana Whitfields. Review Jane, Merge, then Undo in the message.
+3. **Phone numbers:** numbers in mixed formats. Apply, then Undo.
+4. **Missing names:** four (K Nakamura, Marco Alvarez, Riverside Hardware, Sofia Reyes).
+5. **In several books:** Owen Clarke (in both books with one contact ID). Click him: the top box names him and says Apply. Separate them, Apply, then Undo. (If he isn't listed, Thunderbird gave the imported copy a new ID: use `Cleanup copies A.vcf` and `B.vcf` as in the 0.1.21 steps.)
+6. **Lists to labels > Party (mailing list) > Make a label...:** "Move them into" Demo Work "and delete the list". The three get the label Party, are in Demo Work, and Party is gone. Undo: all back.
+7. **Right-click Party** on that page: it asks, Delete; Undo brings it back.
+8. **Lists to labels > Demo Work (address book) > Make a label...:** Move them into Demo Contacts, tick "then delete Demo Work, once it's empty". Demo Work is deleted; Undo on that change says it can't be undone and changes nothing.
+9. **Clean up:** right-click **Demo Contacts** in the sidebar > it asks > Delete.
+
+**Report:** what didn't match, and any Error Console line that mentions contacts-cleanup.
+
 ## 0.1.24: In several books, one contact at a time
 
 From your Daynizer test (2026-10-27). Install `contacts-cleanup/dist/contacts-cleanup-0.1.24.xpi` over 0.1.23.
