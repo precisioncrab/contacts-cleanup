@@ -74,8 +74,9 @@ const pendingOf = (account) => account.contacts.filter((c) => (c.status === "set
 const FILTERS = [
   ["all", "All"],
   ["none", "Without a chat address"],
-  ["notInChat", "Not in the chat list"],
+  ["with", "With a chat address"],
   ["fix", "Chat addresses to fix"],
+  ["notInChat", "Not in the chat list"],
 ];
 
 // The rows for every card, made again only when the cards, the chat list, the gateway or the fixes change.
@@ -96,6 +97,7 @@ function contactRows(ctx) {
     .filter((r) => matches(r.card, ctx.state.search)
       && (filter === "all"
         || (filter === "none" && !r.addresses.length)
+        || (filter === "with" && r.addresses.length > 0)
         || (filter === "notInChat" && r.inChat === false)
         || (filter === "fix" && r.fix)
         || (filter.startsWith("on:") && r.on.includes(filter.slice(3)))));
@@ -268,7 +270,7 @@ function closePick(ctx) {
 }
 
 const writableBooks = (ctx) => {
-  const excluded = new Set(ctx.state.settings.excludedBooks);
+  const excluded = ctx.excludedBooks();
   return ctx.state.books.filter((b) => !b.readOnly && !b.remote && !excluded.has(b.id));
 };
 

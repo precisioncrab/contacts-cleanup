@@ -1,6 +1,19 @@
 # Manual tests
 
-_What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; the real address books can stay unchecked in the sidebar until the test cards behave._
+_What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; pick only the test books in the sidebar (click one, Ctrl+click another; from 0.1.22) until the test cards behave._
+
+## 0.1.22: address books picked like Daynizer's
+
+From your Daynizer test (2026-10-26): the checkboxes beside the address books are gone. Books and labels are picked the way Daynizer's are, and the clean-up tools work on the picked books. The Chat page's Show filter gains "With a chat address". Install `contacts-cleanup/dist/contacts-cleanup-0.1.22.xpi` over 0.1.21. In the 0.1.21 steps below, "check only" a book now means: click it, Ctrl+click the next one.
+
+1. **Click a book** under Address books: Contacts shows only its contacts, the title says "Contacts: <book>", the book is highlighted. A read-only book is greyed out and can't be picked.
+2. **Ctrl+click a second book:** both books' contacts, the title names both. Ctrl+click one again: it's taken out.
+3. **Click a label:** only contacts with that label. Ctrl+click a book as well: contacts in the book or with the label.
+4. **A clean-up page** (Phone numbers, say) with one book picked: a note at the top says "Only <book>, as selected in the sidebar". Ctrl+click another book while on the page: the note names both, and you stay on the page.
+5. **Click All contacts:** every contact again, nothing highlighted; the clean-up pages have no note and work on every book.
+6. **Chat addresses > Show:** "With a chat address" lists only contacts that have one.
+
+**Report:** what didn't match, and any Error Console line that mentions contacts-cleanup.
 
 ## 0.1.21: In several books, and Lists to labels
 

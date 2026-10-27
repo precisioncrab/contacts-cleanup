@@ -217,6 +217,8 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .sidebar-book .count { color: var(--text-faint); font-size: 11px; }
 .sidebar-book.disabled { color: var(--text-faint); cursor: default; }
 .sidebar-book.disabled:hover { background: transparent; }
+.sidebar-item.disabled { color: var(--text-faint); cursor: default; }
+.sidebar-item.disabled:hover { background: transparent; }
 .sidebar-link { white-space: normal; align-items: flex-start; }
 .sidebar-link .name { color: var(--chip-text); overflow: visible; line-height: 1.35; }
 .sidebar-link .sidebar-icon { color: var(--chip-text); font-size: 12px; }
@@ -402,6 +404,7 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
   background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text-2);
 }
 .notice.warn { border-color: var(--warn); }
+.notice.scope-note { max-width: none; margin: 8px 16px 0; flex-shrink: 0; }
 .account-card { background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 8px; padding: 12px; margin-top: 12px; max-width: 680px; }
 .account-card .row-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .account-card .jid { font-weight: 600; overflow-wrap: anywhere; }

@@ -8,7 +8,7 @@
  * what the user kept, recording each change for undo.
  *
  * Stored in storage.local:
- *   settings   { theme, excludedBooks, phoneStyle, country, gateway }
+ *   settings   { theme, phoneStyle, country, gateway }
  *   dismissed  duplicate pairs marked "Not duplicates"
  *   generated  { <card id>: [chat addresses this add-on wrote] }
  *   history    applied changes, newest first (src/core/history.js)
@@ -48,7 +48,7 @@ const VIEWS = { contacts, duplicates, copies, phones, names, labels: labelsView,
 const VIEW_ALIASES = { chatContacts: "chat", fixes: "chat", addresses: "chat" };
 
 // `collapsed`: the sidebar categories folded away.
-const DEFAULT_SETTINGS = { theme: "system", excludedBooks: [], phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null, collapsed: [] };
+const DEFAULT_SETTINGS = { theme: "system", phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null, collapsed: [] };
 
 const state = {
   view: "contacts",
@@ -83,7 +83,9 @@ const state = {
   drafts: new Map(),
   newContact: null,
   // All contacts: the label shown (null for all).
-  contactsFilter: null,
+  // The sidebar selection (click one, Ctrl+click for several, as in Daynizer): the Contacts page
+  // shows contacts in any of them, and the clean-up tools work on the selected address books.
+  pick: { books: [], labels: [] },
   omemo: { loading: false, status: null, result: null, error: null, canAdd: false },
 };
 
@@ -98,6 +100,7 @@ const ctx = {
   derived,
   omemo: omemoClient(),
   render,
+  excludedBooks,
   select(key) {
     state.selected = key;
     state.newContact = null;
@@ -187,11 +190,11 @@ async function reload() {
   // Leftover properties from Thunderbird's Manifest V3 contacts bug, in every writable book (src/lib/addressbook.js).
   const damaged = state.books.filter((b) => !b.readOnly && !b.remote).flatMap((b) => b.contacts).filter((c) => c.junk > 0);
   state.junk = { cards: damaged.length, fields: damaged.reduce((n, c) => n + c.junk, 0), ids: damaged.map((c) => c.id) };
-  const excluded = new Set(state.settings.excludedBooks);
   state.allCards = state.books
     .filter((book) => !book.readOnly && !book.remote)
     .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => ({ ...readCard(node, book.name), uid: node.uid })))
     .sort((a, b) => label(a).localeCompare(label(b)));
+  const excluded = excludedBooks();
   state.cards = state.allCards.filter((c) => !excluded.has(c.parentId));
   await markShadowed();
   upgradeDismissed();
@@ -203,6 +206,17 @@ async function reload() {
       await saveLinks(links, false);
     }
   }
+  afterScope();
+}
+
+/** Address books the clean-up tools leave out: those not selected in the sidebar (none when no book is selected). */
+function excludedBooks() {
+  const picked = state.pick.books;
+  return new Set(picked.length ? state.books.map((b) => b.id).filter((id) => !picked.includes(id)) : []);
+}
+
+/** The cards in scope changed: drops what belonged to cards now out of it, and draws the page again. */
+function afterScope() {
   const ids = new Set(state.cards.map((c) => c.id));
   for (const map of [state.nameEdits, state.nameOn, state.drafts]) {
     for (const id of map.keys()) {
@@ -227,10 +241,6 @@ async function reload() {
 async function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
   await browser.storage.local.set({ settings: state.settings });
-  if ("excludedBooks" in patch) {
-    await reload();
-    return;
-  }
   recompute();
   render();
 }
@@ -456,6 +466,46 @@ function confirmDialog({ title, body, ok = "OK", cancel = "Cancel", danger = fal
 
 /* ---------- Rendering ---------- */
 
+/** The sidebar selection changed: the Contacts page and the clean-up tools follow it. */
+function setPick(pick) {
+  state.pick = pick;
+  if (!state.loading && state.allCards) {
+    const excluded = excludedBooks();
+    state.cards = state.allCards.filter((c) => !excluded.has(c.parentId));
+    afterScope();
+  }
+}
+
+/**
+ * Click on an address book or label shows just it; Ctrl/Cmd+click adds it or
+ * takes it out (as Daynizer's lists and contacts do). On a clean-up page,
+ * Ctrl+click on an address book changes which books the page works on and
+ * stays there.
+ */
+function choose(e, kind, value) {
+  const toggled = (pick) => {
+    const next = { books: [...pick.books], labels: [...pick.labels] };
+    const list = next[kind];
+    const at = list.indexOf(value);
+    if (at >= 0) {
+      list.splice(at, 1);
+    } else {
+      list.push(value);
+    }
+    return next;
+  };
+  const onPage = state.view !== "contacts";
+  if (!(e?.ctrlKey || e?.metaKey)) {
+    setPick({ books: [], labels: [], [kind]: [value] });
+    setView("contacts");
+  } else if (onPage && kind === "books") {
+    setPick(toggled(state.pick));
+  } else {
+    setPick(toggled(onPage ? { books: [], labels: [] } : state.pick));
+    setView("contacts");
+  }
+}
+
 function setView(view) {
   view = VIEW_ALIASES[view] ?? view;
   if (!VIEWS[view]) {
@@ -561,20 +611,20 @@ function renderSidebar() {
   const item = (id) => {
     const v = VIEWS[id];
     const count = state.loading ? null : v.count(ctx);
-    const active = state.view === id && (id !== "contacts" || !state.contactsFilter);
+    const active = state.view === id && (id !== "contacts" || !picking);
     return h("div", clickable({ class: `sidebar-item${active ? " active" : ""}` }, () => {
-      state.contactsFilter = null;
+      // Contacts is every contact; the clean-up pages keep the selection (they work on its address books).
+      if (id === "contacts") {
+        setPick({ books: [], labels: [] });
+      }
       setView(id);
     }),
     h("span", { class: "sidebar-dot", style: { background: v.dot } }),
     h("span", { class: "name" }, v.title),
     countBadge(count));
   };
-  const labelItem = ([text, count]) => h("div", clickable({ class: `sidebar-item${state.view === "contacts" && state.contactsFilter === text ? " active" : ""}`, title: `Contacts with the label ${text}` }, () => {
-    setView("contacts");
-    state.contactsFilter = text;
-    render();
-  }),
+  const picking = state.pick.books.length + state.pick.labels.length > 0;
+  const labelItem = ([text, count]) => h("div", clickable({ class: `sidebar-item${state.view === "contacts" && state.pick.labels.includes(text) ? " active" : ""}`, title: `Contacts with the label ${text}. Ctrl+click to show more than one.` }, (e) => choose(e, "labels", text)),
   h("span", { class: "sidebar-dot", style: { background: "transparent", border: "1px solid var(--text-faint)" } }),
   h("span", { class: "name" }, text),
   countBadge(count));
@@ -585,7 +635,6 @@ function renderSidebar() {
       title),
     collapsed.has(id) ? null : children,
   ];
-  const excluded = new Set(state.settings.excludedBooks);
   const labels = state.loading ? [] : allLabels(state.cards);
   // Daynizer's order: Contacts, Address books, Labels, then this add-on's Clean up, Chat and More.
   // Thunderbird doesn't tell add-ons which address books sync (CardDAV books say remote: false too), so no ⇄ here.
@@ -595,17 +644,19 @@ function renderSidebar() {
       category("contacts", "Contacts", [item("contacts")]),
       category("books", "Address books", state.books.map((book) => {
         const locked = book.readOnly || book.remote;
-        return h("label", { class: `sidebar-book${locked ? " disabled" : ""}`, title: locked ? "Read-only: left alone" : "Include this address book" },
-          h("input", {
-            type: "checkbox",
-            checked: !locked && !excluded.has(book.id),
-            disabled: locked || Boolean(state.busy),
-            onChange: (e) => saveSettings({
-              excludedBooks: e.target.checked ? state.settings.excludedBooks.filter((id) => id !== book.id) : [...state.settings.excludedBooks, book.id],
-            }),
-          }),
-          h("span", { class: "name" }, book.name),
-          h("span", { class: "count" }, locked ? "read-only" : String(book.contacts.length)));
+        if (locked) {
+          return h("div", { class: "sidebar-item disabled", title: "Read-only: left alone" },
+            h("span", { class: "sidebar-dot", style: { background: "transparent", border: "1px solid var(--text-faint)" } }),
+            h("span", { class: "name" }, book.name),
+            h("span", { class: "count" }, "read-only"));
+        }
+        return h("div", clickable({
+          class: `sidebar-item${state.pick.books.includes(book.id) ? " active" : ""}`,
+          title: "Click to show its contacts, Ctrl+click to add it or take it out. The clean-up tools work on the selected address books (all of them when none is).",
+        }, (e) => choose(e, "books", book.id)),
+        h("span", { class: "sidebar-dot", style: { background: "var(--text-faint)" } }),
+        h("span", { class: "name" }, book.name),
+        countBadge(book.contacts.length));
       })),
       labels.length ? category("labels", "Labels", labels.map(labelItem)) : null,
       category("cleanup", "Clean up", [item("duplicates"), item("copies"), item("phones"), item("names"), item("labels")]),
@@ -664,10 +715,23 @@ function renderMain() {
   fill(main,
     h("div", { id: "menu-host" }),
     repairBanner(),
+    scopeNote(),
     body,
     state.busy ? h("div", { class: "toolbar-filters" }, h("span", { id: "progress", class: "progress" })) : null);
   renderMenu();
   renderProgress();
+}
+
+/** On a clean-up page, which address books it looks at when the sidebar selection narrows it. */
+function scopeNote() {
+  const excluded = excludedBooks();
+  if (state.loading || state.view === "contacts" || !excluded.size) {
+    return null;
+  }
+  const names = state.books.filter((b) => !excluded.has(b.id)).map((b) => b.name);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+  return h("div", { class: "notice scope-note" },
+    `Only ${list}, as selected in the sidebar. Ctrl+click an address book to add it or take it out; click Contacts to clean up every address book.`);
 }
 
 /**

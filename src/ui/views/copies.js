@@ -26,7 +26,7 @@ const names = (list) => (list.length > 1 ? `${list.slice(0, -1).join(", ")} and 
 
 /** Every group of copies with a card in a checked address book; `left` says whether it was left as is. */
 export function copyGroups(ctx) {
-  const excluded = new Set(ctx.state.settings.excludedBooks);
+  const excluded = ctx.excludedBooks();
   const left = ctx.state.copiesLeft;
   return findCopies(ctx.state.allCards ?? [])
     .filter((g) => g.cards.some((c) => !excluded.has(c.parentId)))

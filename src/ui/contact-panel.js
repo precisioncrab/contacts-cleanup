@@ -36,7 +36,7 @@ const gatewayOf = (ctx) => normalizeGateway(ctx.state.settings.gateway) ?? DEFAU
 // The address in a chat address box, however it's written (xmpp:, Google's x-apple:, bare).
 const bareChat = (value) => chatAddressOf(value) ?? "";
 const writableBooks = (ctx) => {
-  const excluded = new Set(ctx.state.settings.excludedBooks);
+  const excluded = ctx.excludedBooks();
   return ctx.state.books.filter((b) => !b.readOnly && !b.remote && !excluded.has(b.id));
 };
 

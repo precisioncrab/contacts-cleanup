@@ -26,9 +26,23 @@ export function allLabels(cards) {
   return [...counts].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+/** The contacts the sidebar selection shows: in any selected address book or with any selected label (all when nothing is selected). */
 function visible(ctx) {
-  const filter = ctx.state.contactsFilter;
-  return ctx.state.cards.filter((c) => matches(c, ctx.state.search) && (!filter || c.labels.includes(filter)));
+  const { books, labels } = ctx.state.pick;
+  const base = books.length + labels.length
+    ? ctx.state.allCards.filter((c) => books.includes(c.parentId) || labels.some((l) => c.labels.includes(l)))
+    : ctx.state.cards;
+  return base.filter((c) => matches(c, ctx.state.search));
+}
+
+/** The page title's selection: "Contacts: Work, Family + 2". */
+function pickTitle(ctx) {
+  const { books, labels } = ctx.state.pick;
+  const names = [...books.map((id) => ctx.state.books.find((b) => b.id === id)?.name ?? "?"), ...labels];
+  if (!names.length) {
+    return "Contacts";
+  }
+  return `Contacts: ${names.slice(0, 2).join(", ")}${names.length > 2 ? ` + ${names.length - 2}` : ""}`;
 }
 
 /** Splits a .vcf file into its vCards. */
@@ -47,7 +61,7 @@ function importVCards(ctx) {
       ctx.toast(`${file.name} has no contacts in it.`, { error: true });
       return;
     }
-    const excluded = new Set(ctx.state.settings.excludedBooks);
+    const excluded = ctx.excludedBooks();
     const books = ctx.state.books.filter((b) => !b.readOnly && !b.remote && !excluded.has(b.id));
     let book = books.some((b) => b.id === ctx.state.settings.newCardBook) ? ctx.state.settings.newCardBook : books[0]?.id;
     const go = await ctx.confirm({
@@ -86,10 +100,9 @@ export default {
     // The cards come sorted by name (tab.js reload).
     const list = visible(ctx);
     const manyBooks = new Set(ctx.state.cards.map((c) => c.bookName)).size > 1;
-    const filter = ctx.state.contactsFilter;
     return [
       toolbar(ctx, {
-        title: filter ? `Contacts: ${filter}` : "Contacts",
+        title: pickTitle(ctx),
         extra: [h("button", { onClick: () => importVCards(ctx) }, "Import vCard…")],
         primary: { label: "+ New contact", onClick: () => startNewContact(ctx) },
       }),
