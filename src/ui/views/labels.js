@@ -104,7 +104,7 @@ function afterChoice(pick, leaveText, others) {
 
 async function bookToLabel(ctx, book) {
   const others = writable(ctx).filter((b) => b.id !== book.id);
-  const pick = { label: book.name, move: false, target: others[0]?.id ?? null, lists: true };
+  const pick = { label: book.name, move: false, target: others[0]?.id ?? null, lists: true, deleteBook: false };
   const go = await ctx.confirm({
     title: `Make ${book.name} a label?`,
     body: [
@@ -118,7 +118,12 @@ async function bookToLabel(ctx, book) {
         } }), `Also label the members of its mailing lists with the list's name (${book.lists.map((l) => l.name).join(", ")})`)
         : null,
       ...afterChoice(pick, `Leave the contacts in ${book.name}`, others),
-      h("p", { class: "hint" }, `Moving: a contact that's already in that address book with the same contact ID is combined with that copy instead of copied twice. Moved contacts leave ${book.name}'s mailing lists (the labels keep the grouping); the empty lists and the address book stay until you delete them in Thunderbird.`),
+      others.length
+        ? h("label", { class: "choice", style: { marginLeft: "22px" } }, h("input", { type: "checkbox", onChange: (e) => {
+          pick.deleteBook = e.target.checked;
+        } }), `When moving: then delete ${book.name}, once it's empty. That part can't be undone, and Undo can't put the contacts back into it either.`)
+        : null,
+      h("p", { class: "hint" }, `Moving: a contact that's already in that address book with the same contact ID is combined with that copy instead of copied twice. Moved contacts leave ${book.name}'s mailing lists (the labels keep the grouping); the emptied address book and its lists stay unless you tick the box above (or right-click the address book in the sidebar later).`),
       h("p", { class: "hint" }, "Undo (the message after, or Changes) puts it all back."),
     ],
     ok: "Make the label",
@@ -137,6 +142,15 @@ async function bookToLabel(ctx, book) {
   const entry = await ctx.apply(pick.move
     ? `Moved ${book.name} into ${bookName(ctx, pick.target)} with the label ${pick.label.trim()}`
     : `Labeled ${book.name}'s contacts ${pick.label.trim()}`, changes);
+  if (entry && pick.move && pick.deleteBook) {
+    // Only an address book the move emptied goes (a contact that couldn't be moved keeps it).
+    const now = ctx.state.books.find((b) => b.id === book.id);
+    if (now && now.contacts.length) {
+      ctx.toast(`${book.name} wasn't deleted: ${plural(now.contacts.length, "contact is", "contacts are")} still in it.`, { error: true });
+    } else if (now) {
+      await ctx.deleteBook(now, { asked: true });
+    }
+  }
   if (entry && skipped) {
     ctx.toast(`Done, except ${plural(skipped, "contact", "contacts")} that share a contact ID with another address book (Thunderbird doesn't let add-ons change them). Sort them out under In several books, then make the label again.`);
   }

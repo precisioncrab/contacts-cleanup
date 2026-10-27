@@ -111,6 +111,7 @@ const ctx = {
   dismiss,
   apply,
   undo,
+  deleteBook,
   saveLinks,
   leaveCopies,
   confirm: (options) => confirmDialog(options),
@@ -412,6 +413,40 @@ async function undo(entry) {
   toast(result.done ? `Undone: ${entry.title}.` : `Couldn't undo: ${result.error}`, { error: !result.done });
 }
 
+/**
+ * Deletes an address book ({ id, name, contacts, lists }) after asking, unless
+ * `asked`. It can't be undone; Undo refuses an earlier change that would put
+ * contacts back into it. True when it's gone.
+ */
+async function deleteBook(book, { asked = false } = {}) {
+  if (!asked) {
+    const lists = book.lists?.length ?? 0;
+    const what = [
+      book.contacts.length ? plural(book.contacts.length, "contact", "contacts") : null,
+      lists ? plural(lists, "mailing list", "mailing lists") : null,
+    ].filter(Boolean).join(" and ");
+    const go = await confirmDialog({
+      title: `Delete the address book ${book.name}?`,
+      body: [h("p", {}, `${what ? `Thunderbird deletes it with its ${what}.` : "It's empty."} This can't be undone.`)],
+      ok: "Delete",
+      danger: true,
+    });
+    if (!go) {
+      return false;
+    }
+  }
+  try {
+    await api.deleteBook(book.id);
+  } catch (e) {
+    toast(`Couldn't delete ${book.name}: ${e?.message ?? e}`, { error: true });
+    return false;
+  }
+  state.pick.books = state.pick.books.filter((id) => id !== book.id);
+  await reload().catch(() => {});
+  toast(`Deleted the address book ${book.name}.`);
+  return true;
+}
+
 /* ---------- Toast and dialog ---------- */
 
 let toastTimer = null;
@@ -652,7 +687,13 @@ function renderSidebar() {
         }
         return h("div", clickable({
           class: `sidebar-item${state.pick.books.includes(book.id) ? " active" : ""}`,
-          title: "Click to show its contacts, Ctrl+click to add it or take it out. The clean-up tools work on the selected address books (all of them when none is).",
+          title: "Click to show its contacts, Ctrl+click to add it or take it out. The clean-up tools work on the selected address books (all of them when none is). Right-click to delete it.",
+          onContextMenu: (e) => {
+            e.preventDefault();
+            if (!state.busy) {
+              deleteBook(book);
+            }
+          },
         }, (e) => choose(e, "books", book.id)),
         h("span", { class: "sidebar-dot", style: { background: "var(--text-faint)" } }),
         h("span", { class: "name" }, book.name),

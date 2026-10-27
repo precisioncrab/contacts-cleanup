@@ -2,6 +2,17 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; pick only the test books in the sidebar (click one, Ctrl+click another; from 0.1.22) until the test cards behave._
 
+## 0.1.23: move a mailing list's members, delete lists and address books
+
+From your Daynizer test (2026-10-27, the same changes went into Daynizer's copy). Install `contacts-cleanup/dist/contacts-cleanup-0.1.23.xpi` over 0.1.22. Use a test address book with a test mailing list.
+
+1. **Lists to labels > Make a label... on a mailing list.** "Then:" has three choices: leave the members and keep the list; leave them and delete the list (only the list goes); move them into another address book and delete the list. Pick the move: the members get the label, are in the book you picked and not in the old one, and the list is gone. Undo: all back, the list with its members.
+2. **Right-click a mailing list** on that page: it asks, then deletes the list; its contacts stay. Undo makes it again with its members.
+3. **Make a label... on a whole test address book, "Move them into" another book, and tick "then delete <book>, once it's empty".** The contacts move with the label, the emptied book is deleted. Undo on that change now says it can't be undone (the book is gone) and changes nothing: the moved contacts stay where they are.
+4. **Right-click a test address book in the sidebar:** it asks (with how many contacts and mailing lists go with it), then deletes it. Only try this on a test book: Thunderbird should refuse to delete its built-in Personal Address Book and Collected Addresses, but don't test that on yours.
+
+**Report:** what didn't match, and any Error Console line that mentions contacts-cleanup.
+
 ## 0.1.22: address books picked like Daynizer's
 
 From your Daynizer test (2026-10-26): the checkboxes beside the address books are gone. Books and labels are picked the way Daynizer's are, and the clean-up tools work on the picked books. The Chat page's Show filter gains "With a chat address". Install `contacts-cleanup/dist/contacts-cleanup-0.1.22.xpi` over 0.1.21. In the 0.1.21 steps below, "check only" a book now means: click it, Ctrl+click the next one.

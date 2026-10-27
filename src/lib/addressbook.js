@@ -183,6 +183,18 @@ export const api = {
   async deleteList(id) {
     return browser.mailingLists.delete(id);
   },
+  /** Whether an address book is still there (undo checks it before putting cards back into it). */
+  async bookExists(id) {
+    try {
+      return Boolean(await browser.addressBooks.get(id));
+    } catch {
+      return false;
+    }
+  },
+  /** Deletes an address book with its contacts and mailing lists; can't be undone. */
+  async deleteBook(id) {
+    return browser.addressBooks.delete(id);
+  },
   /**
    * Clears a card's leftover properties (the bug above) and saves it again
    * as it is: its vCard doesn't change. Returns how many were cleared.
