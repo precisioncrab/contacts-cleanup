@@ -12,8 +12,9 @@
  *   or move into another address book (a contact already there with the
  *   same contact ID is combined with that copy rather than copied twice).
  *   Its mailing lists can become labels too.
- *   A mailing list: its members get the label; the list can be deleted
- *   afterwards (Undo makes it again).
+ *   A mailing list: its members get the label; then they stay, or move
+ *   into another address book like a whole book's contacts; the list can
+ *   be deleted afterwards (Undo makes it again).
  */
 
 import { h, plural } from "../dom.js";
@@ -37,6 +38,70 @@ function copiesOf(ctx, uid) {
   return (ctx.state.allCards ?? []).filter((c) => c.uid === uid);
 }
 
+/** Labels the cards where they are; a `shadowed` copy can't be changed, so it's counted in `skipped`. */
+export function labelChanges(cards, labelsFor) {
+  const changes = [];
+  let skipped = 0;
+  for (const card of cards) {
+    const vCard = addLabels(card.vCard, labelsFor(card));
+    if (comparable(vCard) === comparable(card.vCard)) {
+      continue;
+    }
+    if (card.shadowed) {
+      skipped++;
+    } else {
+      changes.push({ type: "update", id: card.id, vCard, label: cardLabel(card) });
+    }
+  }
+  return { changes, skipped };
+}
+
+/**
+ * Moves the cards into the `target` book with their labels: a contact that's
+ * already there with the same contact ID is combined with that copy, the
+ * others are made there with a new ID; the cards they came from are deleted.
+ */
+export function moveChanges(ctx, cards, target, labelsFor) {
+  const changes = [];
+  for (const card of cards) {
+    const copies = copiesOf(ctx, card.uid);
+    const name = cardLabel(card);
+    const there = copies.find((c) => c.parentId === target);
+    if (there) {
+      // Already in the target with this ID: that copy gets this one's details and the labels; this one goes.
+      const both = [there, card];
+      changes.push({
+        type: "copies", uid: card.uid, books: [...new Set(copies.map((c) => c.parentId))], label: name,
+        want: { [target]: addLabels(combinedVCard(both, there.id), labelsFor(card)), [card.parentId]: null },
+      });
+    } else {
+      changes.push({ type: "create", parentId: target, vCard: withoutUid(addLabels(card.vCard, labelsFor(card))), label: name });
+      changes.push(copies.length > 1
+        ? { type: "copies", uid: card.uid, books: [...new Set(copies.map((c) => c.parentId))], want: { [card.parentId]: null }, label: name }
+        : { type: "delete", id: card.id, label: name });
+    }
+  }
+  return changes;
+}
+
+/** "Then:" leave the contacts, or move them into another address book (`pick.move`, `pick.target`). */
+function afterChoice(pick, leaveText, others) {
+  return [
+    h("p", {}, "Then:"),
+    h("label", { class: "choice" }, h("input", { type: "radio", name: "after", checked: true, onChange: () => {
+      pick.move = false;
+    } }), leaveText),
+    others.length
+      ? h("label", { class: "choice" }, h("input", { type: "radio", name: "after", onChange: () => {
+        pick.move = true;
+      } }), "Move them into ",
+      h("select", { onChange: (e) => {
+        pick.target = e.target.value;
+      } }, others.map((b) => h("option", { value: b.id }, b.name))))
+      : null,
+  ];
+}
+
 async function bookToLabel(ctx, book) {
   const others = writable(ctx).filter((b) => b.id !== book.id);
   const pick = { label: book.name, move: false, target: others[0]?.id ?? null, lists: true };
@@ -52,18 +117,7 @@ async function bookToLabel(ctx, book) {
           pick.lists = e.target.checked;
         } }), `Also label the members of its mailing lists with the list's name (${book.lists.map((l) => l.name).join(", ")})`)
         : null,
-      h("p", {}, "Then:"),
-      h("label", { class: "choice" }, h("input", { type: "radio", name: "after", checked: true, onChange: () => {
-        pick.move = false;
-      } }), `Leave the contacts in ${book.name}`),
-      others.length
-        ? h("label", { class: "choice" }, h("input", { type: "radio", name: "after", onChange: () => {
-          pick.move = true;
-        } }), "Move them into ",
-        h("select", { onChange: (e) => {
-          pick.target = e.target.value;
-        } }, others.map((b) => h("option", { value: b.id }, b.name))))
-        : null,
+      ...afterChoice(pick, `Leave the contacts in ${book.name}`, others),
       h("p", { class: "hint" }, `Moving: a contact that's already in that address book with the same contact ID is combined with that copy instead of copied twice. Moved contacts leave ${book.name}'s mailing lists (the labels keep the grouping); the empty lists and the address book stay until you delete them in Thunderbird.`),
       h("p", { class: "hint" }, "Undo (the message after, or Changes) puts it all back."),
     ],
@@ -73,35 +127,9 @@ async function bookToLabel(ctx, book) {
     return;
   }
   const labelsFor = (card) => [pick.label.trim(), ...(pick.lists ? listLabels(book, card) : [])];
-  const changes = [];
-  let skipped = 0;
-  for (const card of cardsIn(ctx, book.id)) {
-    const copies = copiesOf(ctx, card.uid);
-    const name = cardLabel(card);
-    if (!pick.move) {
-      const vCard = addLabels(card.vCard, labelsFor(card));
-      if (card.shadowed) {
-        skipped += comparable(vCard) !== comparable(card.vCard) ? 1 : 0;
-      } else if (comparable(vCard) !== comparable(card.vCard)) {
-        changes.push({ type: "update", id: card.id, vCard, label: name });
-      }
-      continue;
-    }
-    const there = copies.find((c) => c.parentId === pick.target);
-    if (there) {
-      // Already in the target with this ID: that copy gets this one's details and the labels; this one goes.
-      const both = [there, card];
-      changes.push({
-        type: "copies", uid: card.uid, books: [...new Set(copies.map((c) => c.parentId))], label: name,
-        want: { [pick.target]: addLabels(combinedVCard(both, there.id), labelsFor(card)), [book.id]: null },
-      });
-    } else {
-      changes.push({ type: "create", parentId: pick.target, vCard: withoutUid(addLabels(card.vCard, labelsFor(card))), label: name });
-      changes.push(copies.length > 1
-        ? { type: "copies", uid: card.uid, books: [...new Set(copies.map((c) => c.parentId))], want: { [book.id]: null }, label: name }
-        : { type: "delete", id: card.id, label: name });
-    }
-  }
+  const { changes, skipped } = pick.move
+    ? { changes: moveChanges(ctx, cardsIn(ctx, book.id), pick.target, labelsFor), skipped: 0 }
+    : labelChanges(cardsIn(ctx, book.id), labelsFor);
   if (!changes.length) {
     ctx.toast(skipped ? `Nothing labeled: ${plural(skipped, "contact shares", "contacts share")} a contact ID with another address book. Sort them out under In several books first.` : `Every contact in ${book.name} has that label already.`, { error: Boolean(skipped) });
     return;
@@ -115,7 +143,8 @@ async function bookToLabel(ctx, book) {
 }
 
 async function listToLabel(ctx, book, list) {
-  const pick = { label: list.name, remove: false };
+  const others = writable(ctx).filter((b) => b.id !== book.id);
+  const pick = { label: list.name, remove: false, move: false, target: others[0]?.id ?? null };
   const members = cardsIn(ctx, book.id).filter((c) => list.members.includes(c.uid));
   const go = await ctx.confirm({
     title: `Make the list ${list.name} a label?`,
@@ -124,29 +153,22 @@ async function listToLabel(ctx, book, list) {
       h("input", { type: "text", style: { width: "100%" }, value: pick.label, onInput: (e) => {
         pick.label = e.target.value;
       } }),
+      ...afterChoice(pick, `Leave them in ${book.name}`, others),
       h("label", { class: "choice" }, h("input", { type: "checkbox", onChange: (e) => {
         pick.remove = e.target.checked;
-      } }), `Then delete the mailing list. Only the list goes: its contacts stay in ${book.name}, with the label.`),
-      h("p", { class: "hint" }, "Undo (the message after, or Changes) takes the label off and makes the list again with its members."),
+      } }), "And delete the mailing list. Only the list goes, never the contacts in it."),
+      h("p", { class: "hint" }, `Moving: each member is made in the address book you pick, with the label (and the names of ${book.name}'s other mailing lists it's in, as labels), and taken out of ${book.name}. A contact that's already there with the same contact ID is combined with that copy instead of copied twice.`),
+      h("p", { class: "hint" }, "Undo (the message after, or Changes) puts it all back: the contacts where they were, the list with its members."),
     ],
     ok: "Make the label",
   });
   if (!go || !pick.label.trim()) {
     return;
   }
-  const changes = [];
-  let skipped = 0;
-  for (const card of members) {
-    const vCard = addLabels(card.vCard, [pick.label.trim()]);
-    if (comparable(vCard) === comparable(card.vCard)) {
-      continue;
-    }
-    if (card.shadowed) {
-      skipped++;
-    } else {
-      changes.push({ type: "update", id: card.id, vCard, label: cardLabel(card) });
-    }
-  }
+  const labelsFor = (card) => [...new Set([pick.label.trim(), ...(pick.move ? listLabels(book, card) : [])])];
+  const { changes, skipped } = pick.move && pick.target
+    ? { changes: moveChanges(ctx, members, pick.target, labelsFor), skipped: 0 }
+    : labelChanges(members, labelsFor);
   if (pick.remove) {
     changes.push({ type: "deleteList", listId: list.id, label: list.name });
   }
@@ -154,7 +176,10 @@ async function listToLabel(ctx, book, list) {
     ctx.toast(skipped ? `Nothing labeled: ${plural(skipped, "member shares", "members share")} a contact ID with another address book. Sort them out under In several books first.` : `Every member has that label already.`, { error: Boolean(skipped) });
     return;
   }
-  const entry = await ctx.apply(`Labeled the list ${list.name}'s members ${pick.label.trim()}${pick.remove ? " and deleted the list" : ""}`, changes);
+  const done = pick.move && pick.target
+    ? `Moved the list ${list.name}'s members into ${bookName(ctx, pick.target)} with the label ${pick.label.trim()}`
+    : `Labeled the list ${list.name}'s members ${pick.label.trim()}`;
+  const entry = await ctx.apply(`${done}${pick.remove ? " and deleted the list" : ""}`, changes);
   if (entry && skipped) {
     ctx.toast(`Done, except ${plural(skipped, "member", "members")} that share a contact ID with another address book. Sort them out under In several books, then make the label again.`);
   }
