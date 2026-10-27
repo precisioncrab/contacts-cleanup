@@ -8,7 +8,7 @@
  * what the user kept, recording each change for undo.
  *
  * Stored in storage.local:
- *   settings   { theme, phoneStyle, country, gateway }
+ *   settings   { theme, phoneStyle, country, gateway, hiddenBooks, hiddenLabels, bookColors, labelColors, ... }
  *   dismissed  duplicate pairs marked "Not duplicates"
  *   generated  { <card id>: [chat addresses this add-on wrote] }
  *   history    applied changes, newest first (src/core/history.js)
@@ -19,6 +19,7 @@
 import { h, fill, plural } from "./dom.js";
 import { onPhotosLoaded } from "./parts.js";
 import { menuBar } from "./menu.js";
+import { openContextMenu, PALETTE } from "./context-menu.js";
 import { THEMES, applyTheme, getThemePref, initTheme } from "./theme.js";
 import { loadBooks, api, onAddressBookChange, reachableBook, splitKey } from "../lib/addressbook.js";
 import { omemoClient, omemoTier } from "../lib/omemo.js";
@@ -29,7 +30,7 @@ import { phoneFixes, proposeName } from "../core/fixes.js";
 import { prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
 import { applyChanges, undoEntry, addEntry } from "../core/history.js";
-import { partnersOf, pruneLinks, followEdit } from "../core/copies.js";
+import { partnersOf, pruneLinks, followEdit, renameLabel } from "../core/copies.js";
 import { comparable } from "../core/vcard.js";
 import contacts, { allLabels } from "./views/contacts.js";
 import duplicates from "./views/duplicates.js";
@@ -47,16 +48,22 @@ const VIEWS = { contacts, duplicates, copies, phones, names, labels: labelsView,
 // Pages that were renamed or merged, for old links.
 const VIEW_ALIASES = { chatContacts: "chat", fixes: "chat", addresses: "chat" };
 
-// `collapsed`: the sidebar categories folded away.
-const DEFAULT_SETTINGS = { theme: "system", phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null, collapsed: [] };
+// `collapsed`: the sidebar categories folded away. `hiddenBooks`: address books hidden with their
+// contacts (right-click > Hide); `hiddenLabels`: labels off the sidebar. Colors are this add-on's own.
+const DEFAULT_SETTINGS = {
+  theme: "system", phoneStyle: "international", country: "nanp", gateway: DEFAULT_GATEWAY, duplicatesAcrossBooks: false, newCardBook: null, collapsed: [],
+  hiddenBooks: [], hiddenLabels: [], bookColors: {}, labelColors: {},
+};
 
 const state = {
   view: "contacts",
   loading: true,
   loadError: null,
   books: [],
-  // Every card in the writable address books (`cards`: those in the books checked in the sidebar).
+  // Every card in the writable address books; `shownCards`: those not in a hidden address book;
+  // `cards`: those in the books selected in the sidebar.
   allCards: [],
+  shownCards: [],
   cards: [],
   settings: { ...DEFAULT_SETTINGS },
   dismissed: new Set(),
@@ -114,6 +121,8 @@ const ctx = {
   deleteBook,
   saveLinks,
   leaveCopies,
+  renameList,
+  askName: (options) => askName(options),
   confirm: (options) => confirmDialog(options),
   toast: (text, options) => toast(text, options),
 };
@@ -195,8 +204,7 @@ async function reload() {
     .filter((book) => !book.readOnly && !book.remote)
     .flatMap((book) => book.contacts.filter((node) => !node.readOnly).map((node) => ({ ...readCard(node, book.name), uid: node.uid })))
     .sort((a, b) => label(a).localeCompare(label(b)));
-  const excluded = excludedBooks();
-  state.cards = state.allCards.filter((c) => !excluded.has(c.parentId));
+  narrowCards();
   await markShadowed();
   upgradeDismissed();
   // Links to a card that's gone (deleted, or moved to another address book) go too.
@@ -210,10 +218,26 @@ async function reload() {
   afterScope();
 }
 
-/** Address books the clean-up tools leave out: those not selected in the sidebar (none when no book is selected). */
+const hiddenBooks = () => new Set(state.settings.hiddenBooks ?? []);
+
+/**
+ * Address books the pages leave out: hidden ones always, and those not
+ * selected in the sidebar (none when no book is selected).
+ */
 function excludedBooks() {
   const picked = state.pick.books;
-  return new Set(picked.length ? state.books.map((b) => b.id).filter((id) => !picked.includes(id)) : []);
+  return new Set([...hiddenBooks(), ...(picked.length ? state.books.map((b) => b.id).filter((id) => !picked.includes(id)) : [])]);
+}
+
+/** `shownCards` and `cards` from `allCards`. */
+function narrowCards() {
+  const hidden = hiddenBooks();
+  const excluded = excludedBooks();
+  for (const book of state.books) {
+    book.hidden = hidden.has(book.id);
+  }
+  state.shownCards = state.allCards.filter((c) => !hidden.has(c.parentId));
+  state.cards = state.allCards.filter((c) => !excluded.has(c.parentId));
 }
 
 /** The cards in scope changed: drops what belonged to cards now out of it, and draws the page again. */
@@ -450,6 +474,197 @@ async function deleteBook(book, { asked = false } = {}) {
   return true;
 }
 
+/* ---------- Sidebar: right-click, hide, colors, rename ---------- */
+
+/** Right-click on an address book: rename, color, hide, delete (a read-only one: color and hide). */
+function bookMenu(e, book) {
+  const locked = book.readOnly || book.remote;
+  openContextMenu(e, [
+    locked ? null : { label: "Rename…", disabled: Boolean(state.busy), onClick: () => renameBook(book) },
+    { colors: PALETTE, current: state.settings.bookColors?.[book.id] ?? null, onPick: (color) => setColor("bookColors", book.id, color) },
+    { label: "Hide (and its contacts)", onClick: () => setHidden("hiddenBooks", book.id, true) },
+    locked ? null : { separator: true },
+    locked ? null : { label: "Delete address book…", danger: true, disabled: Boolean(state.busy), onClick: () => deleteBook(book) },
+  ]);
+}
+
+/** Right-click on a label: rename, color, hide, delete (from its contacts). */
+function labelMenu(e, text) {
+  openContextMenu(e, [
+    { label: "Rename…", disabled: Boolean(state.busy), onClick: () => renameLabelAsked(text) },
+    { colors: PALETTE, current: state.settings.labelColors?.[text] ?? null, onPick: (color) => setColor("labelColors", text, color) },
+    { label: "Hide", onClick: () => setHidden("hiddenLabels", text, true) },
+    { separator: true },
+    { label: "Delete label…", danger: true, disabled: Boolean(state.busy), onClick: () => renameLabelAsked(text, { remove: true }) },
+  ]);
+}
+
+async function setColor(key, id, color) {
+  const colors = { ...state.settings[key] };
+  if (color) {
+    colors[id] = color;
+  } else {
+    delete colors[id];
+  }
+  await saveSettings({ [key]: colors });
+}
+
+/**
+ * Hides an address book with its contacts (every page leaves them out, as
+ * if it weren't there) or a label (off the sidebar; its contacts stay), or
+ * shows it again. Nothing in Thunderbird changes.
+ */
+async function setHidden(key, id, hidden) {
+  await setManyHidden({ [key]: { [id]: hidden } });
+}
+
+/** { hiddenBooks: { id: hidden }, hiddenLabels: { label: hidden } } */
+async function setManyHidden(changes) {
+  const patch = {};
+  for (const [key, ids] of Object.entries(changes)) {
+    const set = new Set(state.settings[key] ?? []);
+    for (const [id, hidden] of Object.entries(ids)) {
+      set[hidden ? "add" : "delete"](id);
+    }
+    patch[key] = [...set];
+  }
+  await saveSettings(patch);
+  const books = new Set(state.settings.hiddenBooks);
+  const labels = new Set(state.settings.hiddenLabels);
+  setPick({ books: state.pick.books.filter((id) => !books.has(id)), labels: state.pick.labels.filter((l) => !labels.has(l)) });
+}
+
+/** A dialog asking for a name; the new name, or null (cancelled, empty or unchanged). */
+async function askName({ title, text, value, ok = "Rename" }) {
+  let name = value;
+  const input = h("input", { type: "text", style: { width: "100%" }, value, onInput: (e) => {
+    name = e.target.value;
+  }, onKeydown: (e) => {
+    if (e.key === "Enter") {
+      document.querySelector("#modal-root .dialog-actions .primary")?.click();
+    }
+  } });
+  const answer = confirmDialog({ title, body: [text ? h("p", {}, text) : null, input], ok });
+  input.focus();
+  input.select();
+  const go = await answer;
+  const next = name.trim();
+  return go && next && next !== value ? next : null;
+}
+
+async function renameBook(book) {
+  const name = await askName({ title: `Rename ${book.name}`, value: book.name });
+  if (!name) {
+    return;
+  }
+  try {
+    await api.renameBook(book.id, name);
+  } catch (e) {
+    console.error("[contacts-cleanup] renaming an address book", e);
+    toast(`Thunderbird didn't rename ${book.name}, and nothing was changed: ${e?.message ?? e}`, { error: true });
+    return;
+  }
+  await reload().catch(() => {});
+  toast(`Renamed ${book.name} to ${name}.`);
+}
+
+/**
+ * Renames a label on every contact that has it (in the address books not
+ * hidden), or takes it off them (`remove`); the contacts stay. Undo puts
+ * it back.
+ */
+async function renameLabelAsked(text, { remove = false } = {}) {
+  const cards = state.shownCards.filter((c) => c.labels.some((l) => l.toLowerCase() === text.toLowerCase()));
+  let to = "";
+  if (remove) {
+    const go = await confirmDialog({
+      title: `Delete the label ${text}?`,
+      body: [h("p", {}, `It's taken off ${plural(cards.length, "contact", "contacts")}. The contacts themselves stay. Undo (the message after, or Changes) puts the label back.`)],
+      ok: "Delete label",
+      danger: true,
+    });
+    if (!go) {
+      return;
+    }
+  } else {
+    to = await askName({ title: `Rename the label ${text}`, text: `On ${plural(cards.length, "contact", "contacts")}. Undo (the message after, or Changes) puts the old name back.`, value: text });
+    if (!to) {
+      return;
+    }
+  }
+  const changes = [];
+  let skipped = 0;
+  for (const card of cards) {
+    const vCard = renameLabel(card.vCard, text, to);
+    if (vCard === card.vCard) {
+      continue;
+    }
+    if (card.shadowed) {
+      skipped++;
+    } else {
+      changes.push({ type: "update", id: card.id, vCard, label: label(card) });
+    }
+  }
+  const entry = await apply(remove ? `Deleted the label ${text}` : `Renamed the label ${text} to ${to}`, changes);
+  if (entry) {
+    // The label's color and place in the selection go with it.
+    const colors = { ...state.settings.labelColors };
+    if (colors[text]) {
+      if (!remove) {
+        colors[to] = colors[text];
+      }
+      delete colors[text];
+      await saveSettings({ labelColors: colors });
+    }
+    if (state.pick.labels.includes(text)) {
+      setPick({ ...state.pick, labels: remove ? state.pick.labels.filter((l) => l !== text) : state.pick.labels.map((l) => (l === text ? to : l)) });
+    }
+  }
+  if (entry && skipped) {
+    toast(`Done, except ${plural(skipped, "contact", "contacts")} that share a contact ID with another address book (Thunderbird doesn't let add-ons change them). Sort them out under In several books first.`);
+  }
+}
+
+/** Renames a mailing list ({ id, name }); true when it's done. */
+async function renameList(list, name) {
+  try {
+    await api.renameList(list.id, name);
+  } catch (e) {
+    console.error("[contacts-cleanup] renaming a mailing list", e);
+    toast(`Thunderbird didn't rename the list ${list.name}, and nothing was changed: ${e?.message ?? e}`, { error: true });
+    return false;
+  }
+  await reload().catch(() => {});
+  toast(`Renamed the list ${list.name} to ${name}.`);
+  return true;
+}
+
+/** View > Hidden in the sidebar: every address book and label, ticked when shown. */
+async function hiddenDialog() {
+  const want = { hiddenBooks: {}, hiddenLabels: {} };
+  const tick = (key, id, name, hidden, hint) => h("label", { class: "choice" },
+    h("input", { type: "checkbox", checked: !hidden, onChange: (e) => {
+      want[key][id] = !e.target.checked;
+    } }), name, hint ? h("span", { class: "hint" }, ` (${hint})`) : null);
+  const hiddenB = hiddenBooks();
+  const hiddenL = new Set(state.settings.hiddenLabels ?? []);
+  const labels = [...new Set([...allLabels(state.shownCards).map(([l]) => l), ...hiddenL])].sort((a, b) => a.localeCompare(b));
+  const go = await confirmDialog({
+    title: "Hidden in the sidebar",
+    body: [
+      h("p", { class: "hint" }, "Ticked ones show. A hidden address book is left out with its contacts everywhere in Contacts Cleanup: the contact list, the labels and the clean-up pages. A hidden label only comes off the sidebar. Nothing changes in Thunderbird."),
+      h("h4", {}, "Address books"),
+      state.books.map((b) => tick("hiddenBooks", b.id, b.name, hiddenB.has(b.id), plural(b.contacts.length, "contact", "contacts"))),
+      labels.length ? h("h4", {}, "Labels") : null,
+      labels.map((l) => tick("hiddenLabels", l, l, hiddenL.has(l))),
+    ],
+    ok: "Done",
+  });
+  if (go) {
+    await setManyHidden(want);
+  }
+}
+
 /* ---------- Toast and dialog ---------- */
 
 let toastTimer = null;
@@ -508,8 +723,7 @@ function confirmDialog({ title, body, ok = "OK", cancel = "Cancel", danger = fal
 function setPick(pick) {
   state.pick = pick;
   if (!state.loading && state.allCards) {
-    const excluded = excludedBooks();
-    state.cards = state.allCards.filter((c) => !excluded.has(c.parentId));
+    narrowCards();
     afterScope();
   }
 }
@@ -585,6 +799,7 @@ function menus() {
         { separator: true },
         view("history"),
         { separator: true },
+        { label: "Hidden in the sidebar…", onClick: () => hiddenDialog() },
         { label: "Theme", submenu: THEMES.map(([value, text]) => ({ label: text, checked: getThemePref() === value, onClick: () => chooseTheme(value) })) },
       ],
     },
@@ -662,10 +877,17 @@ function renderSidebar() {
     countBadge(count));
   };
   const picking = state.pick.books.length + state.pick.labels.length > 0;
-  const labelItem = ([text, count]) => h("div", clickable({ class: `sidebar-item${state.view === "contacts" && state.pick.labels.includes(text) ? " active" : ""}`, title: `Contacts with the label ${text}. Ctrl+click to show more than one.` }, (e) => choose(e, "labels", text)),
-  h("span", { class: "sidebar-dot", style: { background: "transparent", border: "1px solid var(--text-faint)" } }),
+  const labelColors = state.settings.labelColors ?? {};
+  const labelItem = ([text, count]) => h("div", clickable({
+    class: `sidebar-item${state.view === "contacts" && state.pick.labels.includes(text) ? " active" : ""}`,
+    title: `Contacts with the label ${text}. Ctrl+click to show more than one. Right-click to rename, color, hide or delete it.`,
+    onContextMenu: (e) => labelMenu(e, text),
+  }, (e) => choose(e, "labels", text)),
+  h("span", { class: "sidebar-dot", style: labelColors[text] ? { background: labelColors[text] } : { background: "transparent", border: "1px solid var(--text-faint)" } }),
   h("span", { class: "name" }, text),
   countBadge(count));
+  // "2 hidden": opens View > Hidden in the sidebar.
+  const hiddenNote = (n) => (n ? h("div", clickable({ class: "sidebar-hidden-note", title: "Show or hide address books and labels" }, () => hiddenDialog()), `${n} hidden`) : null);
   const collapsed = new Set(state.settings.collapsed ?? []);
   const category = (id, title, children) => [
     h("div", clickable({ class: "sidebar-section-label sidebar-toggle", "aria-expanded": String(!collapsed.has(id)), title: collapsed.has(id) ? `Show ${title}` : `Fold ${title} away` }, () => toggleCategory(id)),
@@ -673,36 +895,35 @@ function renderSidebar() {
       title),
     collapsed.has(id) ? null : children,
   ];
-  const labels = state.loading ? [] : allLabels(state.cards);
+  const hiddenLabelSet = new Set(state.settings.hiddenLabels ?? []);
+  const allShownLabels = state.loading ? [] : allLabels(state.cards);
+  const labels = allShownLabels.filter(([l]) => !hiddenLabelSet.has(l));
+  const hiddenBookSet = hiddenBooks();
+  const bookColors = state.settings.bookColors ?? {};
   // Daynizer's order: Contacts, Address books, Labels, then this add-on's Clean up, Chat and More.
   // Thunderbird doesn't tell add-ons which address books sync (CardDAV books say remote: false too), so no ⇄ here.
   fill(document.getElementById("sidebar"),
     h("div", { class: "sidebar-header" }, h("img", { src: "../../icons/icon.svg", alt: "" }), "Contacts Cleanup"),
     h("div", { class: "sidebar-list", "data-scroll": "sidebar" },
       category("contacts", "Contacts", [item("contacts")]),
-      category("books", "Address books", state.books.map((book) => {
+      category("books", "Address books", [...state.books.filter((b) => !hiddenBookSet.has(b.id)).map((book) => {
         const locked = book.readOnly || book.remote;
         if (locked) {
-          return h("div", { class: "sidebar-item disabled", title: "Read-only: left alone" },
-            h("span", { class: "sidebar-dot", style: { background: "transparent", border: "1px solid var(--text-faint)" } }),
+          return h("div", { class: "sidebar-item disabled", title: "Read-only: left alone. Right-click to color or hide it.", onContextMenu: (e) => bookMenu(e, book) },
+            h("span", { class: "sidebar-dot", style: bookColors[book.id] ? { background: bookColors[book.id] } : { background: "transparent", border: "1px solid var(--text-faint)" } }),
             h("span", { class: "name" }, book.name),
             h("span", { class: "count" }, "read-only"));
         }
         return h("div", clickable({
           class: `sidebar-item${state.pick.books.includes(book.id) ? " active" : ""}`,
-          title: "Click to show its contacts, Ctrl+click to add it or take it out. The clean-up tools work on the selected address books (all of them when none is). Right-click to delete it.",
-          onContextMenu: (e) => {
-            e.preventDefault();
-            if (!state.busy) {
-              deleteBook(book);
-            }
-          },
+          title: "Click to show its contacts, Ctrl+click to add it or take it out. The clean-up tools work on the selected address books (all of them when none is). Right-click to rename, color, hide or delete it.",
+          onContextMenu: (e) => bookMenu(e, book),
         }, (e) => choose(e, "books", book.id)),
-        h("span", { class: "sidebar-dot", style: { background: "var(--text-faint)" } }),
+        h("span", { class: "sidebar-dot", style: { background: bookColors[book.id] ?? "var(--text-faint)" } }),
         h("span", { class: "name" }, book.name),
         countBadge(book.contacts.length));
-      })),
-      labels.length ? category("labels", "Labels", labels.map(labelItem)) : null,
+      }), hiddenNote(state.books.filter((b) => hiddenBookSet.has(b.id)).length)]),
+      allShownLabels.length ? category("labels", "Labels", [...labels.map(labelItem), hiddenNote(allShownLabels.length - labels.length)]) : null,
       category("cleanup", "Clean up", [item("duplicates"), item("copies"), item("phones"), item("names"), item("labels")]),
       category("chat", "Chat", [item("chat"), omemoItem()]),
       category("more", "More", [item("history"), item("about")])),
@@ -769,7 +990,9 @@ function renderMain() {
 /** On a clean-up page, which address books it looks at when the sidebar selection narrows it. */
 function scopeNote() {
   const excluded = excludedBooks();
-  if (state.loading || state.view === "contacts" || !excluded.size) {
+  const hidden = hiddenBooks();
+  // A hidden address book is left out without asking, so it doesn't make this note show.
+  if (state.loading || state.view === "contacts" || !state.books.some((b) => !hidden.has(b.id) && excluded.has(b.id))) {
     return null;
   }
   const names = state.books.filter((b) => !excluded.has(b.id)).map((b) => b.name);

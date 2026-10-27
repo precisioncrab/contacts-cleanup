@@ -28,6 +28,8 @@ const names = (list) => (list.length > 1 ? `${list.slice(0, -1).join(", ")} and 
 export function copyGroups(ctx) {
   const excluded = ctx.excludedBooks();
   const left = ctx.state.copiesLeft;
+  // Every book counts (a copy in a hidden address book is still a copy), but a contact shows only
+  // with a copy in a book that isn't left out (excludedBooks: hidden, or not selected).
   return findCopies(ctx.state.allCards ?? [])
     .filter((g) => g.cards.some((c) => !excluded.has(c.parentId)))
     .map((g) => ({ ...g, left: left.has(g.uid), name: label(g.cards.find((c) => !c.shadowed) ?? g.cards[0]) }))

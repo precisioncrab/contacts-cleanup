@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { vcard } from "./helpers.js";
 import { readCard } from "../src/core/card.js";
-import { findCopies, differences, combinedVCard, addLabels, labelsOf, copiesPlan, partnersOf, addLink, unlink, pruneLinks, followEdit, sameDetails } from "../src/core/copies.js";
+import { findCopies, differences, combinedVCard, addLabels, labelsOf, renameLabel, copiesPlan, partnersOf, addLink, unlink, pruneLinks, followEdit, sameDetails } from "../src/core/copies.js";
 import { applyChanges, undoEntry, withUid, withoutUid } from "../src/core/history.js";
 
 const key = (book, uid) => `${book}»${uid}`;
@@ -122,6 +122,15 @@ test("labels are added once, whatever their case", () => {
   const labelled = addLabels(syn.vCard, ["wedding 2", "Wedding 2", "Family"]);
   assert.deepEqual(labelsOf(labelled), ["wedding 2", "Family"]);
   assert.equal(addLabels(labelled, ["FAMILY"]), labelled);
+});
+
+test("renameLabel renames a label in any case, merges into one it has, and takes it off", () => {
+  const card = vcard("FN:Pat Example", "CATEGORIES:Family,Wedding 2");
+  assert.deepEqual(labelsOf(renameLabel(card, "wedding 2", "Wedding")), ["Family", "Wedding"]);
+  assert.deepEqual(labelsOf(renameLabel(card, "Wedding 2", "family")), ["Family"]);
+  assert.deepEqual(labelsOf(renameLabel(card, "Family", "")), ["Wedding 2"]);
+  assert.ok(!renameLabel(vcard("FN:Pat Example", "CATEGORIES:Family"), "Family", null).includes("CATEGORIES"));
+  assert.equal(renameLabel(card, "Clients", "Customers"), card);
 });
 
 test("link: the copy Thunderbird reaches gets a new UID in the same book and lists, the other keeps the UID; both get every detail", async () => {

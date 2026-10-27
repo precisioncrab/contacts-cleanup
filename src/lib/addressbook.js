@@ -183,6 +183,14 @@ export const api = {
   async deleteList(id) {
     return browser.mailingLists.delete(id);
   },
+  /** Renames a mailing list (its nickname and description stay). */
+  async renameList(id, name) {
+    const node = await browser.mailingLists.get(id);
+    return browser.mailingLists.update(id, { name, nickName: node.nickName ?? "", description: node.description ?? "" });
+  },
+  async renameBook(id, name) {
+    return browser.addressBooks.update(id, { name });
+  },
   /** Whether an address book is still there (undo checks it before putting cards back into it). */
   async bookExists(id) {
     try {

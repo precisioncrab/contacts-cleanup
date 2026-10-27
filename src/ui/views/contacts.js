@@ -30,7 +30,7 @@ export function allLabels(cards) {
 function visible(ctx) {
   const { books, labels } = ctx.state.pick;
   const base = books.length + labels.length
-    ? ctx.state.allCards.filter((c) => books.includes(c.parentId) || labels.some((l) => c.labels.includes(l)))
+    ? ctx.state.shownCards.filter((c) => books.includes(c.parentId) || labels.some((l) => c.labels.includes(l)))
     : ctx.state.cards;
   return base.filter((c) => matches(c, ctx.state.search));
 }

@@ -2,25 +2,28 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; pick only the test books in the sidebar (click one, Ctrl+click another; from 0.1.22) until the test cards behave._
 
-## Quick run before the ATN submission (about 10 minutes, 0.1.24)
+## Quick run before the ATN submission (about 15 minutes, 0.1.25)
 
 Made-up cards only: `docs/test-cards/Demo Contacts.vcf` (12 cards) and `Demo Work.vcf` (6 cards), the same people as the listing's screenshots.
 
 **Set up (once):**
-1. Install `contacts-cleanup/dist/contacts-cleanup-0.1.24.xpi` (Add-ons and Themes > gear > Install Add-on From File).
+1. Install `contacts-cleanup/dist/contacts-cleanup-0.1.25.xpi` (Add-ons and Themes > gear > Install Add-on From File).
 2. Import both files into Thunderbird (Tools > Import > Address Books > vCard file, one file at a time). Each becomes its own address book, named after the file: **Demo Contacts** and **Demo Work**.
 3. In Thunderbird's Address Book, select Demo Contacts and make a mailing list **Party** with Jane Doe, Priya Shah and Tom Ashby (New List).
+4. **Hide your real address books** (new in 0.1.25), so only the demo people show (for the run and for screenshots): in Contacts Cleanup, right-click each of your own address books in the sidebar > **Hide (and its contacts)**. Or View > **Hidden in the sidebar…**, untick yours, Done. Nothing changes in Thunderbird; tick them again at the end.
 
 **Run, in Contacts Cleanup:**
-1. **Sidebar:** click **Demo Contacts**: its 12 contacts. Ctrl+click **Demo Work**: both books (18). Keep both picked for the rest.
+1. **Sidebar:** All contacts shows only the 17 demo people (Owen counted once per book: 18 cards), and "N hidden" under Address books. Click **Demo Contacts**: its 12. Ctrl+click **Demo Work**: both books (18). Keep both picked for the rest.
+1a. **Right-click Demo Work** in the sidebar: a menu with Rename…, a row of color dots, Hide (and its contacts), Delete address book…. Pick a color dot: Demo Work's dot takes it. Rename… to "Demo Work 2", then back to "Demo Work".
+1b. **Right-click a label** (Family): Rename…, color dots, Hide, Delete label…. Pick a color. Rename… to "Kin": Jane Doe and Tom Ashby now show Kin; Undo in the message: Family again.
 2. **Duplicates:** Jane D and Jane Doe, Bob Miller and Robert Miller, the two Dana Whitfields. Review Jane, Merge, then Undo in the message.
 3. **Phone numbers:** numbers in mixed formats. Apply, then Undo.
 4. **Missing names:** four (K Nakamura, Marco Alvarez, Riverside Hardware, Sofia Reyes).
 5. **In several books:** Owen Clarke (in both books with one contact ID). Click him: the top box names him and says Apply. Separate them, Apply, then Undo. (If he isn't listed, Thunderbird gave the imported copy a new ID: use `Cleanup copies A.vcf` and `B.vcf` as in the 0.1.21 steps.)
 6. **Lists to labels > Party (mailing list) > Make a label...:** "Move them into" Demo Work "and delete the list". The three get the label Party, are in Demo Work, and Party is gone. Undo: all back.
-7. **Right-click Party** on that page: it asks, Delete; Undo brings it back.
+7. **Right-click Party** on that page: a menu with Rename…, Make a label…, Delete mailing list…. Rename… it to "Party 2" (Thunderbird's Address Book shows the new name). Then Delete mailing list…: it asks, Delete; Undo brings it back.
 8. **Lists to labels > Demo Work (address book) > Make a label...:** Move them into Demo Contacts, tick "then delete Demo Work, once it's empty". Demo Work is deleted; Undo on that change says it can't be undone and changes nothing.
-9. **Clean up:** right-click **Demo Contacts** in the sidebar > it asks > Delete.
+9. **Clean up:** right-click **Demo Contacts** in the sidebar > Delete address book… > it asks > Delete. Then View > Hidden in the sidebar…, tick your own address books again, Done.
 
 **Report:** what didn't match, and any Error Console line that mentions contacts-cleanup.
 
