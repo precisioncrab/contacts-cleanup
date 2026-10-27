@@ -438,7 +438,10 @@ async function deleteBook(book, { asked = false } = {}) {
   try {
     await api.deleteBook(book.id);
   } catch (e) {
-    toast(`Couldn't delete ${book.name}: ${e?.message ?? e}`, { error: true });
+    // Thunderbird refuses its two built-in books with a bare "An unexpected error occurred" (and
+    // doesn't tell add-ons which books are built in), so the message says what that usually means.
+    console.error("[contacts-cleanup] deleting an address book", e);
+    toast(`Thunderbird didn't delete ${book.name}, and nothing was changed. It never deletes its two built-in address books (Personal Address Book and Collected Addresses); other address books can be deleted.`, { error: true });
     return false;
   }
   state.pick.books = state.pick.books.filter((id) => id !== book.id);
