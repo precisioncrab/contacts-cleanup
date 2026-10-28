@@ -29,13 +29,13 @@ import { findDuplicates, suggestPeople } from "../core/duplicates.js";
 import { phoneFixes, proposeName } from "../core/fixes.js";
 import { prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
-import { applyChanges, undoEntry, addEntry } from "../core/history.js";
+import { applyChanges, undoEntry, addEntry, entryChanged } from "../core/history.js";
 import { partnersOf, pruneLinks, followEdit, renameLabel } from "../core/copies.js";
 import { comparable } from "../core/vcard.js";
 import contacts, { allLabels } from "./views/contacts.js";
 import duplicates from "./views/duplicates.js";
 import copies from "./views/copies.js";
-import labelsView from "./views/labels.js";
+import labelsView, { listMenu } from "./views/labels.js";
 import phones from "./views/phones.js";
 import names from "./views/names.js";
 import chat from "./views/chat.js";
@@ -89,10 +89,13 @@ const state = {
   // The contact editor (contact-panel.js): edits per contact until saved, and a new contact being made.
   drafts: new Map(),
   newContact: null,
-  // All contacts: the label shown (null for all).
   // The sidebar selection (click one, Ctrl+click for several, as in Daynizer): the Contacts page
-  // shows contacts in any of them, and the clean-up tools work on the selected address books.
-  pick: { books: [], labels: [] },
+  // shows contacts in any of the address books, labels and mailing lists picked, and the clean-up
+  // tools work on the selected address books.
+  pick: { books: [], labels: [], lists: [] },
+  // In several books: what was applied since the page was opened ({ title, entry }), kept on
+  // screen with Undo, since a contact sorted out leaves the list.
+  copiesDone: [],
   omemo: { loading: false, status: null, result: null, error: null, canAdd: false },
 };
 
@@ -122,6 +125,7 @@ const ctx = {
   saveLinks,
   leaveCopies,
   renameList,
+  writeTo,
   askName: (options) => askName(options),
   confirm: (options) => confirmDialog(options),
   toast: (text, options) => toast(text, options),
@@ -193,6 +197,9 @@ async function reload() {
   try {
     state.books = await loadBooks();
     state.loadError = null;
+    // A mailing list picked in the sidebar that's gone (deleted, or undone) comes out of the pick.
+    const listIds = new Set(state.books.flatMap((b) => (b.lists ?? []).map((l) => l.id)));
+    state.pick.lists = state.pick.lists.filter((id) => listIds.has(id));
   } catch (e) {
     state.books = [];
     state.loadError = e?.message ?? String(e);
@@ -370,7 +377,7 @@ async function apply(title, changes, extra = {}) {
   if (extra.onDone) {
     await extra.onDone(results, entry);
   }
-  if (entry.cards.length || entry.lists?.length) {
+  if (entryChanged(entry)) {
     if (extra.generated) {
       const done = new Set(entry.cards.map((c) => c.id));
       entry.generated = {
@@ -390,7 +397,7 @@ async function apply(title, changes, extra = {}) {
   } else {
     toast(`${title}.`, { entry });
   }
-  return entry.cards.length || entry.lists?.length ? entry : null;
+  return entryChanged(entry) ? entry : null;
 }
 
 async function undo(entry) {
@@ -476,10 +483,11 @@ async function deleteBook(book, { asked = false } = {}) {
 
 /* ---------- Sidebar: right-click, hide, colors, rename ---------- */
 
-/** Right-click on an address book: rename, color, hide, delete (a read-only one: color and hide). */
+/** Right-click on an address book: new mailing list, rename, color, hide, delete (a read-only one: color and hide). */
 function bookMenu(e, book) {
   const locked = book.readOnly || book.remote;
   openContextMenu(e, [
+    locked ? null : { label: "New mailing list…", disabled: Boolean(state.busy), onClick: () => newList(book) },
     locked ? null : { label: "Rename…", disabled: Boolean(state.busy), onClick: () => renameBook(book) },
     { colors: PALETTE, current: state.settings.bookColors?.[book.id] ?? null, onPick: (color) => setColor("bookColors", book.id, color) },
     { label: "Hide (and its contacts)", onClick: () => setHidden("hiddenBooks", book.id, true) },
@@ -488,9 +496,13 @@ function bookMenu(e, book) {
   ]);
 }
 
-/** Right-click on a label: rename, color, hide, delete (from its contacts). */
+/** Right-click on a label: write to everyone with it, rename, color, hide, delete (from its contacts). */
 function labelMenu(e, text) {
+  const people = labelRecipients(text);
   openContextMenu(e, [
+    { label: "New message to everyone with this label", disabled: !people.length, onClick: () => writeToLabel(text, "to") },
+    { label: "New message to everyone with this label (Bcc)", disabled: !people.length, onClick: () => writeToLabel(text, "bcc") },
+    { separator: true },
     { label: "Rename…", disabled: Boolean(state.busy), onClick: () => renameLabelAsked(text) },
     { colors: PALETTE, current: state.settings.labelColors?.[text] ?? null, onPick: (color) => setColor("labelColors", text, color) },
     { label: "Hide", onClick: () => setHidden("hiddenLabels", text, true) },
@@ -531,7 +543,7 @@ async function setManyHidden(changes) {
   await saveSettings(patch);
   const books = new Set(state.settings.hiddenBooks);
   const labels = new Set(state.settings.hiddenLabels);
-  setPick({ books: state.pick.books.filter((id) => !books.has(id)), labels: state.pick.labels.filter((l) => !labels.has(l)) });
+  setPick({ ...state.pick, books: state.pick.books.filter((id) => !books.has(id)), labels: state.pick.labels.filter((l) => !labels.has(l)) });
 }
 
 /** A dialog asking for a name; the new name, or null (cancelled, empty or unchanged). */
@@ -622,6 +634,75 @@ async function renameLabelAsked(text, { remove = false } = {}) {
   }
   if (entry && skipped) {
     toast(`Done, except ${plural(skipped, "contact", "contacts")} that share a contact ID with another address book (Thunderbird doesn't let add-ons change them). Sort them out under In several books first.`);
+  }
+}
+
+/**
+ * Makes a mailing list in an address book (undoable), and shows it.
+ * Thunderbird keeps mailing lists in local address books only (its CardDAV
+ * books say supportsMailingLists: false, and its own Address Book offers no
+ * New List there), but it doesn't tell add-ons which books are synced, so
+ * the question says so.
+ */
+async function newList(book) {
+  const name = await askName({
+    title: `New mailing list in ${book.name}`,
+    text: "Then tick it under Mailing lists in a contact's editor to put that contact on it. Thunderbird only puts contacts with an email address on a mailing list, and only contacts in this address book. Mailing lists belong in local address books (like Personal Address Book): Thunderbird doesn't keep or sync them in synced ones (CardDAV, Google), where a label does the same job.",
+    value: "",
+    ok: "Create",
+  });
+  if (!name) {
+    return;
+  }
+  const entry = await apply(`New mailing list ${name} in ${book.name}`, [{ type: "createList", parentId: book.id, name, label: name }]);
+  const id = entry?.madeLists?.[0]?.id;
+  if (id) {
+    setPick({ lists: [id] });
+    setView("contacts");
+  }
+}
+
+/** "Name <address>" for a new message, the name quoted when it needs to be. */
+function mimeAddress(name, address) {
+  if (!name) {
+    return address;
+  }
+  return /[",.;:<>@()[\]\\]/.test(name) ? `"${name.replace(/(["\\])/g, "\\$1")}" <${address}>` : `${name} <${address}>`;
+}
+
+/** Everyone with a label (address books not hidden) who has an email address, as recipients; one per contact. */
+function labelRecipients(text) {
+  const seen = new Set();
+  const out = [];
+  for (const card of state.shownCards) {
+    const address = card.emails[0]?.address;
+    if (!address || !card.labels.some((l) => l.toLowerCase() === text.toLowerCase()) || seen.has(address.toLowerCase())) {
+      continue;
+    }
+    seen.add(address.toLowerCase());
+    out.push(mimeAddress(label(card), address));
+  }
+  return out;
+}
+
+/** Opens a new message (Thunderbird's compose window) with these recipients ({ to, bcc }). */
+async function writeTo(details) {
+  try {
+    await browser.compose.beginNew(details);
+  } catch (e) {
+    console.error("[contacts-cleanup] opening a new message", e);
+    toast(`Thunderbird didn't open a new message: ${e?.message ?? e}`, { error: true });
+  }
+}
+
+/** A new message to everyone with the label, in To or Bcc; says who has no email address. */
+async function writeToLabel(text, field) {
+  const people = labelRecipients(text);
+  const all = state.shownCards.filter((c) => c.labels.some((l) => l.toLowerCase() === text.toLowerCase())).length;
+  await writeTo({ [field]: people });
+  const missing = all - people.length;
+  if (missing > 0) {
+    toast(`${plural(missing, "contact", "contacts")} with the label ${text} ${missing > 1 ? "have" : "has"} no email address, or the same one as another, and ${missing > 1 ? "aren't" : "isn't"} in the message.`);
   }
 }
 
@@ -721,7 +802,7 @@ function confirmDialog({ title, body, ok = "OK", cancel = "Cancel", danger = fal
 
 /** The sidebar selection changed: the Contacts page and the clean-up tools follow it. */
 function setPick(pick) {
-  state.pick = pick;
+  state.pick = { books: [], labels: [], lists: [], ...pick };
   if (!state.loading && state.allCards) {
     narrowCards();
     afterScope();
@@ -736,7 +817,7 @@ function setPick(pick) {
  */
 function choose(e, kind, value) {
   const toggled = (pick) => {
-    const next = { books: [...pick.books], labels: [...pick.labels] };
+    const next = { books: [...pick.books], labels: [...pick.labels], lists: [...pick.lists] };
     const list = next[kind];
     const at = list.indexOf(value);
     if (at >= 0) {
@@ -748,12 +829,12 @@ function choose(e, kind, value) {
   };
   const onPage = state.view !== "contacts";
   if (!(e?.ctrlKey || e?.metaKey)) {
-    setPick({ books: [], labels: [], [kind]: [value] });
+    setPick({ [kind]: [value] });
     setView("contacts");
   } else if (onPage && kind === "books") {
     setPick(toggled(state.pick));
   } else {
-    setPick(toggled(onPage ? { books: [], labels: [] } : state.pick));
+    setPick(toggled(onPage ? { books: [], labels: [], lists: [] } : state.pick));
     setView("contacts");
   }
 }
@@ -762,6 +843,9 @@ function setView(view) {
   view = VIEW_ALIASES[view] ?? view;
   if (!VIEWS[view]) {
     return;
+  }
+  if (view !== state.view) {
+    state.copiesDone = [];
   }
   state.view = view;
   state.selected = null;
@@ -868,7 +952,7 @@ function renderSidebar() {
     return h("div", clickable({ class: `sidebar-item${active ? " active" : ""}` }, () => {
       // Contacts is every contact; the clean-up pages keep the selection (they work on its address books).
       if (id === "contacts") {
-        setPick({ books: [], labels: [] });
+        setPick({});
       }
       setView(id);
     }),
@@ -876,7 +960,7 @@ function renderSidebar() {
     h("span", { class: "name" }, v.title),
     countBadge(count));
   };
-  const picking = state.pick.books.length + state.pick.labels.length > 0;
+  const picking = state.pick.books.length + state.pick.labels.length + state.pick.lists.length > 0;
   const labelColors = state.settings.labelColors ?? {};
   const labelItem = ([text, count]) => h("div", clickable({
     class: `sidebar-item${state.view === "contacts" && state.pick.labels.includes(text) ? " active" : ""}`,
@@ -914,14 +998,23 @@ function renderSidebar() {
             h("span", { class: "name" }, book.name),
             h("span", { class: "count" }, "read-only"));
         }
-        return h("div", clickable({
+        // Its mailing lists under it, as in Thunderbird's Address Book (a list holds contacts of its own book).
+        return [h("div", clickable({
           class: `sidebar-item${state.pick.books.includes(book.id) ? " active" : ""}`,
-          title: "Click to show its contacts, Ctrl+click to add it or take it out. The clean-up tools work on the selected address books (all of them when none is). Right-click to rename, color, hide or delete it.",
+          title: "Click to show its contacts, Ctrl+click to add it or take it out. The clean-up tools work on the selected address books (all of them when none is). Right-click for a new mailing list, or to rename, color, hide or delete it.",
           onContextMenu: (e) => bookMenu(e, book),
         }, (e) => choose(e, "books", book.id)),
         h("span", { class: "sidebar-dot", style: { background: bookColors[book.id] ?? "var(--text-faint)" } }),
         h("span", { class: "name" }, book.name),
-        countBadge(book.contacts.length));
+        countBadge(book.contacts.length)),
+        ...(book.lists ?? []).map((list) => h("div", clickable({
+          class: `sidebar-item sidebar-sub${state.view === "contacts" && state.pick.lists.includes(list.id) ? " active" : ""}`,
+          title: `Mailing list in ${book.name}. Click to show its members, Ctrl+click to add it or take it out. Right-click to write to it, rename it, make it a label or delete it.`,
+          onContextMenu: (e) => listMenu(ctx, e, book, list),
+        }, (e) => choose(e, "lists", list.id)),
+        h("span", { class: "sidebar-icon", "aria-hidden": "true" }, "☰"),
+        h("span", { class: "name" }, list.name),
+        countBadge(list.members.length)))];
       }), hiddenNote(state.books.filter((b) => hiddenBookSet.has(b.id)).length)]),
       allShownLabels.length ? category("labels", "Labels", [...labels.map(labelItem), hiddenNote(allShownLabels.length - labels.length)]) : null,
       category("cleanup", "Clean up", [item("duplicates"), item("copies"), item("phones"), item("names"), item("labels")]),
@@ -1090,8 +1183,10 @@ function render() {
 /* ---------- Start ---------- */
 
 document.addEventListener("keydown", (e) => {
-  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName ?? "");
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !inField) {
+  // Ctrl+Z in a text box undoes the typing there; anywhere else (a list, a checkbox, a drop-down) it undoes the last change.
+  const el = document.activeElement;
+  const typing = el?.tagName === "TEXTAREA" || el?.isContentEditable || (el?.tagName === "INPUT" && !/^(checkbox|radio|button|submit|reset|range|color|file)$/.test(el.type));
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !typing) {
     e.preventDefault();
     undo(lastEntry());
   } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {

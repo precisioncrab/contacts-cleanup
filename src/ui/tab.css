@@ -210,6 +210,9 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .sidebar-item .count { color: var(--text-faint); font-size: 11px; }
 .sidebar-item .count.has { color: var(--chip-text); font-weight: 600; }
 .sidebar-icon { width: 16px; text-align: center; color: var(--text-muted); flex-shrink: 0; }
+/* A mailing list, under its address book. */
+.sidebar-item.sidebar-sub { padding: 5px 14px 5px 26px; font-size: 12px; }
+.sidebar-item.sidebar-sub .sidebar-icon { font-size: 11px; color: var(--text-faint); }
 .sidebar-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .sidebar-book { display: flex; align-items: center; gap: 8px; padding: 5px 14px; font-size: 12px; color: var(--text-2); cursor: pointer; }
 .sidebar-book:hover { background: var(--bg-hover); }
@@ -582,6 +585,7 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 /* ---------- Chat lists per account ---------- */
 .contact-panel .cp-accounts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 2px; }
 .contact-panel .cp-accounts .cp-hint { margin: 0; }
+.contact-panel .cp-lists { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 4px; }
 .account-group { margin-top: 18px; }
 .account-group:first-child { margin-top: 4px; }
 .account-heading { margin: 0 0 6px; font-size: 14px; }
@@ -590,6 +594,9 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 /* ---------- In several books ---------- */
 .copies-box { margin: 10px 16px 0; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-card); }
 .copies-box-title { font-size: 12px; color: var(--text-2); margin-bottom: 8px; }
+.copies-done .cp-line { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; }
+.copies-done .cp-line .spacer { flex: 1; }
+.copies-done .cp-hint { margin: 6px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.45; }
 .copies-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12px; color: var(--text-2); }
 .copies-controls label { display: flex; align-items: center; gap: 6px; }
 .copies-controls select, .copies-controls input[type="text"] { background: var(--bg-control); padding: 3px 8px; color: var(--text); max-width: 100%; min-width: 0; font-size: 12px; }

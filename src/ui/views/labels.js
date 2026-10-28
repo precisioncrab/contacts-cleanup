@@ -210,9 +210,12 @@ async function listToLabel(ctx, book, list) {
   }
 }
 
-/** Right-click on a mailing list: rename it, or delete it. */
-function listMenu(ctx, e, book, list) {
+/** Right-click on a mailing list (here or in the sidebar): write to it, rename it, make it a label, or delete it. */
+export function listMenu(ctx, e, book, list) {
   openContextMenu(e, [
+    // Thunderbird puts the list in the message and sends to its members.
+    { label: "New message to this list", disabled: !list.members.length, onClick: () => ctx.writeTo({ to: [{ id: list.id, type: "mailingList" }] }) },
+    { separator: true },
     { label: "Rename…", disabled: Boolean(ctx.state.busy), onClick: async () => {
       const name = await ctx.askName({ title: `Rename the list ${list.name}`, value: list.name });
       if (name) {
@@ -253,7 +256,7 @@ export default {
     ]);
     return [
       toolbar(ctx, { title: "Address books and mailing lists to labels", search: false }),
-      h("div", { class: "toolbar-filters" }, h("span", {}, "A label stays with a contact wherever it goes, and syncs with it (Google, CardDAV; phones show labels as groups). An address book or mailing list only holds contacts of its own book. Right-click a mailing list to rename or delete it.")),
+      h("div", { class: "toolbar-filters" }, h("span", {}, "A label stays with a contact wherever it goes, and syncs with it (Google, CardDAV; phones show labels as groups). An address book or mailing list only holds contacts of its own book. Right-click a mailing list (here or in the sidebar, under its address book) to write to it, rename it or delete it.")),
       h("div", { class: "list", "data-scroll": "labels" },
         rows.length
           ? rows.map(({ key, book, list }) => row(ctx, {

@@ -167,6 +167,16 @@ export const api = {
     await browser.mailingLists.addMember(listId, splitKey(key).uid);
     return true;
   },
+  /** Takes a card off a mailing list; false when the list is gone. */
+  async removeFromList(listId, key) {
+    try {
+      await browser.mailingLists.get(listId);
+    } catch {
+      return false;
+    }
+    await browser.mailingLists.removeMember(listId, splitKey(key).uid);
+    return true;
+  },
   /** A mailing list as { id, parentId, name, nickName, description, members: [card id] }, or null. */
   async getList(id) {
     try {

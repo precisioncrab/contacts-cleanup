@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { vcard } from "./helpers.js";
 import { readCard } from "../src/core/card.js";
 import { findCopies, differences, combinedVCard, addLabels, labelsOf, renameLabel, copiesPlan, partnersOf, addLink, unlink, pruneLinks, followEdit, sameDetails } from "../src/core/copies.js";
-import { applyChanges, undoEntry, withUid, withoutUid } from "../src/core/history.js";
+import { applyChanges, undoEntry, withUid, withoutUid, entryChanged } from "../src/core/history.js";
 
 const key = (book, uid) => `${book}»${uid}`;
 const uidOf = (id) => id.split("»")[1];
@@ -80,6 +80,14 @@ function fakeThunderbird(books, cards) {
         return false;
       }
       list.members = [...new Set([...list.members, uidOf(id)])];
+      return true;
+    },
+    async removeFromList(listId, id) {
+      const list = lists.get(listId);
+      if (!list) {
+        return false;
+      }
+      list.members = list.members.filter((m) => m !== uidOf(id));
       return true;
     },
     async getList(id) {
@@ -236,4 +244,38 @@ test("links: partners, joining, unlinking, pruning; an edit carried to a linked 
   assert.match(followed, /UID:u1/);
   assert.equal(sameDetails(followed, edited), true);
   assert.equal(sameDetails(syn.vCard, edited), false);
+});
+
+test("a mailing list made, and people put on and taken off, are undone", async () => {
+  const api = fakeThunderbird(["wed"], [wed, solo]);
+  api.lists.set("wl", { parentId: "wed", name: "Wedding", members: ["u2"] });
+  const made = await applyChanges(api, "New list", [{ type: "createList", parentId: "wed", name: "Party", label: "Party" }]);
+  const [partyId] = made.results;
+  assert.equal(api.lists.get(partyId).name, "Party");
+  assert.equal(entryChanged(made.entry), true);
+
+  const ticked = await applyChanges(api, "Edited", [
+    { type: "listMember", listId: partyId, id: wed.id, add: true, label: "Pat" },
+    { type: "listMember", listId: "wl", id: solo.id, add: false, label: "Sam" },
+  ]);
+  assert.equal(ticked.error, null);
+  assert.deepEqual(api.lists.get(partyId).members, ["u1"]);
+  assert.deepEqual(api.lists.get("wl").members, []);
+  assert.equal(entryChanged(ticked.entry), true);
+  assert.equal(ticked.entry.cards.length, 0);
+
+  assert.equal((await undoEntry(api, ticked.entry)).done, true);
+  assert.deepEqual(api.lists.get(partyId).members, []);
+  assert.deepEqual(api.lists.get("wl").members, ["u2"]);
+
+  assert.equal((await undoEntry(api, made.entry)).done, true);
+  assert.equal(api.lists.has(partyId), false);
+  assert.equal(api.store.length, 2, "the contacts stay");
+});
+
+test("putting someone on a mailing list that's gone stops with a message", async () => {
+  const api = fakeThunderbird(["wed"], [wed]);
+  const { error, entry } = await applyChanges(api, "Edited", [{ type: "listMember", listId: "gone", id: wed.id, add: true, label: "Pat" }]);
+  assert.match(error, /isn't there any more/);
+  assert.equal(entryChanged(entry), false);
 });

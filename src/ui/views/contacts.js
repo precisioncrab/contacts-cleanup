@@ -26,11 +26,18 @@ export function allLabels(cards) {
   return [...counts].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-/** The contacts the sidebar selection shows: in any selected address book or with any selected label (all when nothing is selected). */
+/** The mailing lists picked in the sidebar. */
+const pickedLists = (ctx) => ctx.state.books.flatMap((b) => b.lists ?? []).filter((l) => ctx.state.pick.lists.includes(l.id));
+
+/** Whether a card is on a mailing list (a list holds cards of its own address book, by UID). */
+export const onList = (list, card) => card.parentId === list.parentId && list.members.includes(card.uid);
+
+/** The contacts the sidebar selection shows: in any selected address book, with any selected label or on any selected mailing list (all when nothing is selected). */
 function visible(ctx) {
   const { books, labels } = ctx.state.pick;
-  const base = books.length + labels.length
-    ? ctx.state.shownCards.filter((c) => books.includes(c.parentId) || labels.some((l) => c.labels.includes(l)))
+  const lists = pickedLists(ctx);
+  const base = books.length + labels.length + lists.length
+    ? ctx.state.shownCards.filter((c) => books.includes(c.parentId) || labels.some((l) => c.labels.includes(l)) || lists.some((l) => onList(l, c)))
     : ctx.state.cards;
   return base.filter((c) => matches(c, ctx.state.search));
 }
@@ -38,7 +45,7 @@ function visible(ctx) {
 /** The page title's selection: "Contacts: Work, Family + 2". */
 function pickTitle(ctx) {
   const { books, labels } = ctx.state.pick;
-  const names = [...books.map((id) => ctx.state.books.find((b) => b.id === id)?.name ?? "?"), ...labels];
+  const names = [...books.map((id) => ctx.state.books.find((b) => b.id === id)?.name ?? "?"), ...labels, ...pickedLists(ctx).map((l) => l.name)];
   if (!names.length) {
     return "Contacts";
   }
@@ -116,7 +123,11 @@ export default {
           card.shadowed ? tag(`also in ${card.shadowed}: can't change this copy`, "warn") : null,
           partnersOf(ctx.state.links, card.id).length ? tag("linked", "plain") : null,
         ],
-      }), { empty: emptyState(ctx.state.search ? "Nothing matches the search." : "No contacts here yet.", ctx.state.search ? "" : "Check an address book in the sidebar, or add a contact.") }),
+      }), { empty: ctx.state.search
+        ? emptyState("Nothing matches the search.", "")
+        : pickedLists(ctx).length && ctx.state.pick.books.length + ctx.state.pick.labels.length === 0
+          ? emptyState("No one on this mailing list yet.", "Select a contact in its address book and tick the list under Mailing lists in the editor. Thunderbird only puts contacts with an email address on a mailing list.")
+          : emptyState("No contacts here yet.", "Pick an address book in the sidebar, or add a contact.") }),
     ];
   },
 
