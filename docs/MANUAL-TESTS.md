@@ -2,28 +2,23 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; pick only the test books in the sidebar (click one, Ctrl+click another; from 0.1.22) until the test cards behave._
 
-## Quick run before the ATN submission (about 15 minutes, 0.1.26)
+## Quick run before the ATN submission (about 15 minutes, 0.1.27)
 
-Mailing lists in the sidebar, new mailing lists, a Mailing lists field in the editor, New message to a label or a list, Ctrl+Z on any page, and In several books keeping what you applied on screen. (0.1.25's run, 2026-10-28: steps 1 to 4, 6 and 8 passed; 5, 7 and 9 led to this build.)
+Import vCard into any address book or a new one with a label, a mailing list's own page (everyone in its address book with a checkbox), and right-click a contact for its labels and mailing lists. (0.1.26's run, 2026-10-28, passed; Owen Clarke wasn't in In several books, Grace Okafor was, so the step was done with her.)
 
-Made-up cards only: `docs/test-cards/Demo Contacts.vcf` (12 cards) and `Demo Work.vcf` (6 cards).
+Made-up cards only: `docs/test-cards/Demo Contacts.vcf` (12 cards) and `Demo Work.vcf` (6 cards). This time Contacts Cleanup imports them itself.
 
 **Set up (once):**
-1. Install `contacts-cleanup/dist/contacts-cleanup-0.1.26.xpi` over 0.1.25 (Add-ons and Themes > gear > Install Add-on From File).
-2. Start the demo books fresh: in Contacts Cleanup, right-click **Demo Contacts** > Delete address book… > Delete (and **Demo Work**, if it's still there).
-3. Import both files again (Tools > Import > Address Books > vCard file, one file at a time): **Demo Contacts** and **Demo Work**. No mailing list to make in Thunderbird this time.
-4. Your own address books should still be hidden from the last run (only the demo people show). If not: right-click each > Hide (and its contacts).
+1. Install `contacts-cleanup/dist/contacts-cleanup-0.1.27.xpi` over 0.1.26 (Add-ons and Themes > gear > Install Add-on From File).
+2. In Contacts Cleanup: View > Hidden in the sidebar…, untick your own address books, Done. (Step 7 of the last run showed them again.)
 
 **Run, in Contacts Cleanup:**
-1. **New mailing list:** right-click **Demo Contacts** in the sidebar > New mailing list… > type Party > Create. Party shows indented under Demo Contacts (0), it's selected, and the page says no one is on it yet.
-2. **The editor's Mailing lists:** All contacts > Jane Doe > under Mailing lists tick Party > Save: "Put Jane Doe on the mailing list Party." Same for Priya Shah. Click Party in the sidebar: Jane and Priya. Select Tom Ashby: his Party tick is greyed, with a note that he needs an email address first.
-3. **Ctrl+Z:** click Priya's row (not a text box) and press Ctrl+Z: "Undone: Put Priya Shah on the mailing list Party", and Party holds only Jane. Tick Priya again and Save.
-4. **Right-click Party** in the sidebar: New message to this list, Rename…, Make a label…, Delete mailing list….
-   - New message to this list: Thunderbird opens a message with Party in To. Close it without saving.
-   - Rename… to Party 2: the sidebar and Thunderbird's Address Book show Party 2.
-   - Delete mailing list… > Delete: gone from the sidebar. Undo in the message: back, with Jane and Priya.
-5. **Write to a label:** right-click **Clients** under Labels > New message to everyone with this label: To has Owen Clarke and Dana Whitfield, once each. Close it without saving. Right-click **Family** > New message to everyone with this label (Bcc): Jane Doe in Bcc, and a message saying 1 contact (Tom) has no email address.
-6. **In several books:** click Owen Clarke > Separate them > Apply > Apply. Owen leaves the list, and a box at the top says "Owen Clarke: separated the copies." with Undo. Click Undo: it says undone. Owen stays off this list (his two copies keep their own IDs now; Thunderbird won't let them share one again). Your 0.1.25 note "the name disappeared" was this.
+1. **Import into a new address book, with a label:** All contacts > Import vCard… > `Demo Contacts.vcf`. "Into:" lists your own books too, marked "(hidden in the sidebar)", and New address book… at the end: pick New address book…; the name box says Demo Contacts. Type Demo in "Add a label to each" > Import 12. Demo Contacts shows in the sidebar, selected, with its 12 contacts, and Demo is under Labels (12). Click Undo in the message: the contacts and the new book are gone. Import it again the same way and keep it.
+2. **A second new book, no label:** Import vCard… > `Demo Work.vcf` > New address book… (Demo Work) > Import 6.
+3. **The mailing list page:** right-click Demo Contacts > New mailing list… > Party > Create. Party's page lists all 12 Demo Contacts people, none ticked; Tom Ashby is greyed (no email address). Type pri in the search box: Priya Shah shows (the search covers the whole address book). Clear it. Tick Jane Doe and Priya Shah: the bar says "Apply to put 2 contacts on." > Apply. Party (2) in the sidebar.
+4. **Untick and undo:** untick Priya > Apply: "Took Priya Shah off the mailing list Party." Click an empty part of the list, press Ctrl+Z: Priya is ticked again. Show > On the list: Jane and Priya; Not on it: the other 10.
+5. **Right-click a contact:** All contacts > right-click Robert Miller > Labels ▸: Demo ticked, the other labels not, and New label…. Click Demo: "Took the label Demo off Robert Miller." Right-click him > Labels > New label… > VIP > Add. Right-click him > Mailing lists ▸ > Party: "Put Robert Miller on the mailing list Party." Right-click Tom Ashby > Mailing lists: Party is greyed, with "Add an email address first".
+6. **Thunderbird's Address Book:** open it: Demo Contacts has Party with Jane, Priya and Robert.
 7. **Clean up:** right-click Demo Contacts > Delete address book… > Delete; the same for Demo Work. Then View > Hidden in the sidebar…, tick your own address books again, Done.
 
 **Report:** what didn't match, and any Error Console line that mentions contacts-cleanup.

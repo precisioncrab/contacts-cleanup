@@ -241,6 +241,11 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .context-menu .item.danger { color: var(--danger-text); }
 .context-menu .item.disabled { color: var(--text-faint); cursor: default; }
 .context-menu .item.disabled:hover { background: transparent; }
+.context-menu .item .tick { display: inline-block; width: 16px; }
+.context-menu .item.has-sub { display: flex; align-items: center; gap: 12px; }
+.context-menu .item.has-sub span:first-child { flex: 1; }
+.context-menu .sub-arrow { color: var(--text-faint); font-size: 10px; }
+.context-menu.sub { max-height: 70vh; overflow-y: auto; }
 .context-menu .separator { height: 1px; margin: 4px 0; background: var(--border-strong); }
 .context-menu .colors { display: flex; gap: 6px; padding: 6px 14px; }
 .context-menu .swatch { width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
@@ -300,6 +305,7 @@ input[type="radio"] { accent-color: var(--accent-color); margin: 0; cursor: poin
 .toolbar-filters label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; cursor: pointer; }
 .toolbar-filters select, .toolbar-filters input[type="text"] { background: var(--bg-control); padding: 3px 8px; color: var(--text); max-width: 100%; min-width: 0; }
 .toolbar-filters .right { margin-left: auto; }
+.list-filters .hint { flex: 1; min-width: 0; line-height: 1.4; }
 
 /* ---------- View tabs ---------- */
 .view-tabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--border); }
@@ -507,6 +513,8 @@ img.avatar.photo { object-fit: cover; background: var(--bg-hover); }
 .dialog h2 { margin: 0 0 10px; font-size: 15px; }
 .dialog p, .dialog li { line-height: 1.5; color: var(--text-2); font-size: 13px; }
 .dialog ul { padding-left: 18px; max-height: 200px; overflow-y: auto; }
+.dialog .dialog-label { display: block; margin: 12px 0 4px; font-size: 12px; color: var(--text-muted); }
+.dialog .hint { font-size: 12px; color: var(--text-muted); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dialog-actions button { padding: 7px 14px; }
 

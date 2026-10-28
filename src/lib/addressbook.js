@@ -201,6 +201,15 @@ export const api = {
   async renameBook(id, name) {
     return browser.addressBooks.update(id, { name });
   },
+  /** Makes a local address book (add-ons can't make synced ones); its id. */
+  async createBook(name) {
+    return browser.addressBooks.create({ name });
+  },
+  /** Whether an address book has no contacts and no mailing lists. */
+  async bookIsEmpty(id) {
+    const book = await browser.addressBooks.get(id, true);
+    return !(book.contacts?.length || book.mailingLists?.length);
+  },
   /** Whether an address book is still there (undo checks it before putting cards back into it). */
   async bookExists(id) {
     try {

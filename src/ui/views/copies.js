@@ -87,7 +87,7 @@ function explain(ctx, groups, choice) {
     lines.push(`The copy in ${bookName(ctx, book)} stays and gets the other copies' details${labels.length ? `, with the label${labels.length > 1 ? "s" : ""} ${names([...new Set(labels)])}` : ""}.`);
     lines.push(`The copies in ${names(others)} are deleted, and leave their mailing lists there.`);
   } else {
-    lines.push(`Each copy gets its own contact ID and keeps its own details. From then on they're two contacts, edited apart. The copy in ${first} is made again with a new ID (same details, same mailing lists).`);
+    lines.push(`Each copy gets its own contact ID and keeps its own details. From then on they're two contacts, edited separately. The copy in ${first} is made again with a new ID (same details, same mailing lists).`);
   }
   lines.push("Undo (on this page, the message after, or Changes) puts the details and mailing lists back. The copies keep separate IDs, so the contact won't come back to this list: Thunderbird doesn't let add-ons give two contacts one ID again.");
   return lines;
@@ -158,7 +158,7 @@ function controls(ctx, key, groups) {
     ["leave", "Leave as is"],
     ["link", "Link the copies: editing one edits the others"],
     ...books.map((b) => [`keep:${b}`, `Keep the copy in ${bookName(ctx, b)}, label it, delete the others`]),
-    ["separate", "Separate them: two contacts, edited apart"],
+    ["separate", "Separate them: two contacts, edited separately"],
   ];
   const keepBook = choice.action.startsWith("keep:") ? choice.action.slice(5) : null;
   const removedLists = keepBook ? [...new Set(groups.flatMap((g) => g.cards.filter((c) => c.parentId !== keepBook).flatMap((c) => listsOf(ctx, c))))] : [];

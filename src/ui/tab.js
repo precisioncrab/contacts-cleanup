@@ -30,7 +30,7 @@ import { phoneFixes, proposeName } from "../core/fixes.js";
 import { prefixFixes, DEFAULT_GATEWAY } from "../core/chat.js";
 import { countryById } from "../core/phone.js";
 import { applyChanges, undoEntry, addEntry, entryChanged } from "../core/history.js";
-import { partnersOf, pruneLinks, followEdit, renameLabel } from "../core/copies.js";
+import { partnersOf, pruneLinks, followEdit, renameLabel, addLabels } from "../core/copies.js";
 import { comparable } from "../core/vcard.js";
 import contacts, { allLabels } from "./views/contacts.js";
 import duplicates from "./views/duplicates.js";
@@ -96,6 +96,8 @@ const state = {
   // In several books: what was applied since the page was opened ({ title, entry }), kept on
   // screen with Undo, since a contact sorted out leaves the list.
   copiesDone: [],
+  // A mailing list's page: its ticks waiting for Apply (src/ui/views/contacts.js).
+  listEdit: null,
   omemo: { loading: false, status: null, result: null, error: null, canAdd: false },
 };
 
@@ -126,6 +128,12 @@ const ctx = {
   leaveCopies,
   renameList,
   writeTo,
+  contactMenu: (e, card) => contactMenu(e, card),
+  // Shows just this address book, label or mailing list on the Contacts page.
+  show(kind, value) {
+    setPick({ [kind]: [value] });
+    setView("contacts");
+  },
   askName: (options) => askName(options),
   confirm: (options) => confirmDialog(options),
   toast: (text, options) => toast(text, options),
@@ -441,7 +449,10 @@ async function undo(entry) {
   state.busy = null;
   applying = false;
   await reload();
-  toast(result.done ? `Undone: ${entry.title}.` : `Couldn't undo: ${result.error}`, { error: !result.done });
+  const kept = result.keptBooks?.length
+    ? ` The address book ${result.keptBooks.join(", ")} stays: something else was put in it since.`
+    : "";
+  toast(result.done ? `Undone: ${entry.title}.${kept}` : `Couldn't undo: ${result.error}`, { error: !result.done });
 }
 
 /**
@@ -508,6 +519,56 @@ function labelMenu(e, text) {
     { label: "Hide", onClick: () => setHidden("hiddenLabels", text, true) },
     { separator: true },
     { label: "Delete label…", danger: true, disabled: Boolean(state.busy), onClick: () => renameLabelAsked(text, { remove: true }) },
+  ]);
+}
+
+/**
+ * Right-click on a contact: its labels and its address book's mailing
+ * lists, ticked when it has them; a click adds or takes off one (undoable).
+ */
+function contactMenu(e, card) {
+  if (card.shadowed) {
+    openContextMenu(e, [{ label: `Can't change this copy (also in ${card.shadowed}): sort it out under In several books`, disabled: true }]);
+    return;
+  }
+  const name = label(card);
+  const has = new Set(card.labels.map((l) => l.toLowerCase()));
+  const labels = [...new Set([...allLabels(state.shownCards).map(([l]) => l), ...card.labels])].sort((a, b) => a.localeCompare(b));
+  const setLabel = (text, on) => apply(on ? `Gave ${name} the label ${text}` : `Took the label ${text} off ${name}`, [{
+    type: "update", id: card.id, vCard: on ? addLabels(card.vCard, [text]) : renameLabel(card.vCard, text, ""), label: name,
+  }]);
+  const book = state.books.find((b) => b.id === card.parentId);
+  const lists = book?.lists ?? [];
+  const email = card.emails.length > 0;
+  const busy = Boolean(state.busy);
+  openContextMenu(e, [
+    { label: "Labels", submenu: [
+      ...labels.map((text) => ({ label: text, checked: has.has(text.toLowerCase()), disabled: busy, onClick: () => setLabel(text, !has.has(text.toLowerCase())) })),
+      labels.length ? { separator: true } : null,
+      { label: "New label…", disabled: busy, onClick: async () => {
+        const text = await askName({ title: `New label for ${name}`, value: "", ok: "Add" });
+        if (text) {
+          await setLabel(text, true);
+        }
+      } },
+    ] },
+    { label: "Mailing lists", submenu: lists.length
+      ? [
+        ...lists.map((list) => {
+          const on = list.members.includes(card.uid);
+          return {
+            label: list.name,
+            checked: on,
+            // Taking someone off always works; putting them on needs an email address.
+            disabled: busy || (!on && !email),
+            title: !on && !email ? "Thunderbird only puts contacts with an email address on a mailing list." : null,
+            onClick: () => apply(on ? `Took ${name} off the mailing list ${list.name}` : `Put ${name} on the mailing list ${list.name}`, [{ type: "listMember", listId: list.id, id: card.id, add: !on, label: name }]),
+          };
+        }),
+        email ? null : { separator: true },
+        email ? null : { label: "Add an email address first to put them on a list", disabled: true },
+      ]
+      : [{ label: `${book?.name ?? "This address book"} has no mailing lists`, disabled: true }] },
   ]);
 }
 
@@ -647,7 +708,7 @@ async function renameLabelAsked(text, { remove = false } = {}) {
 async function newList(book) {
   const name = await askName({
     title: `New mailing list in ${book.name}`,
-    text: "Then tick it under Mailing lists in a contact's editor to put that contact on it. Thunderbird only puts contacts with an email address on a mailing list, and only contacts in this address book. Mailing lists belong in local address books (like Personal Address Book): Thunderbird doesn't keep or sync them in synced ones (CardDAV, Google), where a label does the same job.",
+    text: "It opens with everyone in this address book listed: tick the ones to put on it, then Apply. Thunderbird only puts contacts with an email address on a mailing list, and only contacts in this address book. Mailing lists belong in local address books (like Personal Address Book): Thunderbird doesn't keep or sync them in synced ones (CardDAV, Google), where a label does the same job.",
     value: "",
     ok: "Create",
   });

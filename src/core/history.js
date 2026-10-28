@@ -26,7 +26,9 @@
  * undo makes it again with its members. A mailing list made is kept in
  * entry.madeLists ({ id, parentId, name }) and undo deletes it; a card put
  * on or taken off a list is kept in entry.members ({ listId, id, add }) and
- * undo does the opposite.
+ * undo does the opposite. An address book made (an import into a new one)
+ * is kept in entry.madeBooks ({ id, name }); undo deletes it once the cards
+ * made in it are gone, but only when nothing else is in it by then.
  *
  * `api` is the address book (src/lib/addressbook.js, or a fake in tests):
  * get(id) -> node|null, update(id, vCard), create(parentId, vCard) -> id,
@@ -34,7 +36,8 @@
  * mailing lists, when it has them: listsOf(id) -> [list id],
  * addToList(listId, id), removeFromList(listId, id), getList(id),
  * createList(parentId, list) -> id, deleteList(id); and bookExists(id) ->
- * bool, when it can tell.
+ * bool, when it can tell; for new address books, createBook(name) -> id,
+ * bookIsEmpty(id) -> bool and deleteBook(id).
  */
 
 import { comparable, parseVCard, parseLine, serializeVCard, insertProp, photoLines, withoutPhoto, withPhoto } from "./vcard.js";
@@ -122,7 +125,10 @@ const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).sli
 /**
  * Applies changes in order: [{ type: "update", id, vCard, label }],
  * [{ type: "delete", id, label }], [{ type: "create", parentId, vCard,
- * label, lists }] (lists: mailing list ids to put the new card in),
+ * label, lists }] (lists: mailing list ids to put the new card in; in place
+ * of parentId, bookRef names an address book made by an earlier change),
+ * [{ type: "createBook", name, ref, label }] (a new address book, which
+ * later changes name by `ref`),
  * [{ type: "copies", uid, books, want, label }] (see sortCopies),
  * [{ type: "deleteList", listId, label }], [{ type: "createList", parentId,
  * name, label }] or [{ type: "listMember", listId, id, add, label }] (puts
@@ -137,15 +143,26 @@ const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).sli
 export async function applyChanges(api, title, changes, onProgress = () => {}) {
   const entry = { id: newId(), time: Date.now(), title, cards: [], undone: false };
   const results = [];
+  // Address books made by these changes, by ref.
+  const madeBooks = new Map();
   try {
     for (const [i, change] of changes.entries()) {
       if (change.type === "create") {
-        const id = await api.create(change.parentId, change.vCard);
+        const parentId = change.bookRef ? madeBooks.get(change.bookRef) : change.parentId;
+        if (!parentId) {
+          throw new Error(`The address book for "${change.label}" wasn't made.`);
+        }
+        const id = await api.create(parentId, change.vCard);
         for (const list of change.lists ?? []) {
           await api.addToList(list, id).catch(() => false);
         }
         const saved = (await api.get(id))?.vCard ?? change.vCard;
-        entry.cards.push({ id, parentId: change.parentId, label: change.label, before: null, after: saved });
+        entry.cards.push({ id, parentId, label: change.label, before: null, after: saved });
+        results.push(id);
+      } else if (change.type === "createBook") {
+        const id = await api.createBook(change.name);
+        madeBooks.set(change.ref, id);
+        entry.madeBooks = [...(entry.madeBooks ?? []), { id, name: change.name }];
         results.push(id);
       } else if (change.type === "copies") {
         results.push(await sortCopies(api, entry, change));
@@ -300,7 +317,19 @@ export async function undoEntry(api, entry, { force = false } = {}) {
         await api.deleteList(list.id);
       }
     }
-    return { conflicts, done: true, error: null };
+    // Address books it made go after their cards, when nothing else was put in them since.
+    const keptBooks = [];
+    for (const book of entry.madeBooks ?? []) {
+      if (!(await api.bookExists(book.id).catch(() => false))) {
+        continue;
+      }
+      if (await api.bookIsEmpty(book.id)) {
+        await api.deleteBook(book.id);
+      } else {
+        keptBooks.push(book.name);
+      }
+    }
+    return { conflicts, done: true, error: null, ...(keptBooks.length ? { keptBooks } : {}) };
   } catch (e) {
     return { conflicts, done: false, error: e?.message ?? String(e) };
   }
@@ -319,7 +348,7 @@ async function createWithFallback(api, parentId, vCard) {
 }
 
 /** Whether an entry changed anything (cards, or mailing lists alone). */
-export const entryChanged = (entry) => Boolean(entry.cards.length || entry.lists?.length || entry.madeLists?.length || entry.members?.length);
+export const entryChanged = (entry) => Boolean(entry.cards.length || entry.lists?.length || entry.madeLists?.length || entry.members?.length || entry.madeBooks?.length);
 
 /** The history with a new entry on top, at most HISTORY_LIMIT long. */
 export function addEntry(history, entry) {

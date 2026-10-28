@@ -162,3 +162,64 @@ test("a created card is recorded with no before; undo deletes it, and asks first
   book.nodes.delete(again.entry.cards[0].id);
   assert.deepEqual(await undoEntry(book, again.entry), { conflicts: [], done: true, error: null });
 });
+
+/** fakeBook with address books that can be made, checked and deleted. */
+function withBooks(api) {
+  const books = new Set(["book-1"]);
+  let made = 0;
+  return Object.assign(api, {
+    books,
+    async createBook() {
+      const id = `made-${++made}`;
+      books.add(id);
+      return id;
+    },
+    async bookExists(id) {
+      return books.has(id);
+    },
+    async bookIsEmpty(id) {
+      return ![...api.nodes.values()].some((n) => n.parentId === id);
+    },
+    async deleteBook(id) {
+      books.delete(id);
+    },
+  });
+}
+
+test("an import into a new address book makes it first; undo deletes it with its cards", async () => {
+  const api = withBooks(fakeBook());
+  const { entry, error } = await applyChanges(api, "Import", [
+    { type: "createBook", name: "Demo", ref: "new", label: "Demo" },
+    { type: "create", bookRef: "new", vCard: vcard("FN:Jane Doe"), label: "Jane Doe" },
+    { type: "create", bookRef: "new", vCard: vcard("FN:Tom Ashby"), label: "Tom Ashby" },
+  ]);
+  assert.equal(error, null);
+  assert.deepEqual(entry.madeBooks, [{ id: "made-1", name: "Demo" }]);
+  assert.deepEqual([...api.nodes.values()].map((n) => n.parentId), ["made-1", "made-1"]);
+  const result = await undoEntry(api, entry);
+  assert.equal(result.done, true);
+  assert.equal(api.nodes.size, 0);
+  assert.equal(api.books.has("made-1"), false);
+  assert.equal(result.keptBooks, undefined);
+});
+
+test("undo keeps a made address book that something else went into since", async () => {
+  const api = withBooks(fakeBook());
+  const { entry } = await applyChanges(api, "Import", [
+    { type: "createBook", name: "Demo", ref: "new", label: "Demo" },
+    { type: "create", bookRef: "new", vCard: vcard("FN:Jane Doe"), label: "Jane Doe" },
+  ]);
+  await api.create("made-1", vcard("FN:Someone Else"));
+  const result = await undoEntry(api, entry);
+  assert.equal(result.done, true);
+  assert.equal(api.books.has("made-1"), true);
+  assert.deepEqual(result.keptBooks, ["Demo"]);
+  assert.equal(api.nodes.size, 1);
+});
+
+test("a card for an address book that wasn't made stops the import", async () => {
+  const api = withBooks(fakeBook());
+  const { error } = await applyChanges(api, "Import", [{ type: "create", bookRef: "new", vCard: vcard("FN:Jane Doe"), label: "Jane Doe" }]);
+  assert.match(error, /wasn't made/);
+  assert.equal(api.nodes.size, 0);
+});

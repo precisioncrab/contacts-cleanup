@@ -4,9 +4,11 @@
 
 /**
  * A right-click menu, like Daynizer's (class "context-menu"). Items:
- * { label, onClick, danger, disabled, separator } or
+ * { label, onClick, danger, disabled, separator, checked, title } or
  * { colors: [{ name, color }], current, onPick } for a row of color dots
- * (onPick(null) is "No color").
+ * (onPick(null) is "No color"), or { label, submenu: [items] } for items
+ * that open beside it on hover. `checked` (true or false) puts a tick
+ * column in front of the label.
  */
 
 import { h } from "./dom.js";
@@ -54,7 +56,8 @@ export function openContextMenu(event, items) {
     close();
     fn?.();
   };
-  current = h("div", { class: "context-menu", role: "menu" }, items.filter(Boolean).map((item) => {
+  let openSub = null;
+  const build = (list) => list.filter(Boolean).map((item) => {
     if (item.separator) {
       return h("div", { class: "separator" });
     }
@@ -69,19 +72,55 @@ export function openContextMenu(event, items) {
         })),
         h("button", { class: `swatch none${item.current ? "" : " on"}`, title: "No color", "aria-label": "No color", onClick: pick(() => item.onPick(null)) }));
     }
+    if (item.submenu) {
+      const el = h("div", { class: `item has-sub${item.disabled ? " disabled" : ""}`, role: "menuitem", "aria-haspopup": "true", title: item.title ?? null },
+        h("span", {}, item.label), h("span", { class: "sub-arrow", "aria-hidden": "true" }, "▸"));
+      const show = () => {
+        if (item.disabled || openSub?.owner === el) {
+          return;
+        }
+        openSub?.remove();
+        const sub = h("div", { class: "context-menu sub", role: "menu" }, build(item.submenu));
+        sub.owner = el;
+        current.append(sub);
+        const at = el.getBoundingClientRect();
+        place(sub, at.right - 2, at.top - 4, at.left + 2);
+        openSub = sub;
+      };
+      el.addEventListener("mouseenter", show);
+      el.addEventListener("click", show);
+      return el;
+    }
+    const tick = item.checked === undefined ? null : h("span", { class: "tick", "aria-hidden": "true" }, item.checked ? "✓" : "");
     return h("div", {
       class: `item${item.danger ? " danger" : ""}${item.disabled ? " disabled" : ""}`,
-      role: "menuitem",
+      role: item.checked === undefined ? "menuitem" : "menuitemcheckbox",
+      "aria-checked": item.checked === undefined ? null : String(item.checked),
+      title: item.title ?? null,
+      // Moving onto a plain item of the top menu closes an open submenu.
+      onMouseenter: (e) => {
+        if (openSub && e.currentTarget.parentElement === current) {
+          openSub.remove();
+          openSub = null;
+        }
+      },
       onClick: item.disabled ? null : pick(item.onClick),
-    }, item.label);
-  }));
+    }, tick, item.label);
+  });
+  current = h("div", { class: "context-menu", role: "menu" }, build(items));
   document.body.append(current);
-  const { width, height } = current.getBoundingClientRect();
-  const margin = 8;
-  current.style.left = `${Math.max(margin, Math.min(event.clientX, window.innerWidth - width - margin))}px`;
-  current.style.top = `${Math.max(margin, Math.min(event.clientY, window.innerHeight - height - margin))}px`;
+  place(current, event.clientX, event.clientY);
   document.addEventListener("mousedown", onOutside, true);
   document.addEventListener("keydown", onKey, true);
   window.addEventListener("blur", close);
   window.addEventListener("resize", close);
+}
+
+/** Puts a menu at (x, y), kept on screen; a submenu that won't fit on the right goes left of `flipX`. */
+function place(menu, x, y, flipX = null) {
+  const { width, height } = menu.getBoundingClientRect();
+  const margin = 8;
+  const left = flipX !== null && x + width > window.innerWidth - margin ? flipX - width : x;
+  menu.style.left = `${Math.max(margin, Math.min(left, window.innerWidth - width - margin))}px`;
+  menu.style.top = `${Math.max(margin, Math.min(y, window.innerHeight - height - margin))}px`;
 }
