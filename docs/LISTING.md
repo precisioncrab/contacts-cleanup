@@ -1,4 +1,6 @@
-# addons.thunderbird.net listing (draft)
+# addons.thunderbird.net listing
+
+_**Submitted 2026-10-28 (0.1.28)**, listing page filled in the same day; waiting on the review. What went in each field: `../ATN-SUBMISSION.md` next to the repo._
 
 _Drafted 2026-10-20. Accurate wording only, no keyword stuffing (ATN reviewers reject it). "XMPP" goes in the summary, "OMEMO" in the description (decided 2026-10-18)._
 
@@ -34,14 +36,22 @@ Contacts Cleanup tidies Thunderbird's address book and gets your contacts ready 
 
 It opens as a tab from its button in Thunderbird's left sidebar, its toolbar button or Tools > Contacts Cleanup, in light or dark (it follows Thunderbird's theme, or pick one).
 
-**What it can access:** your address books, to read cards and change the ones you apply changes to. It makes no network connections and sends nothing anywhere.
+**What it can access:** your address books, to read cards and change the ones you apply changes to. It makes no network connections and sends nothing anywhere. Copies of the cards it changes are kept on your computer, in Thunderbird's storage for the add-on, so Undo can put them back.
 
 Also by Precision Crab: Daynizer, tasks, calendar and contacts with CalDAV and CardDAV sync in Thunderbird (https://addons.thunderbird.net/thunderbird/addon/daynizer/).
 
 Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
 
+### Summaries offered 2026-10-28 (naming labels and mailing lists; which one went in is to confirm)
+- Cleans up and manages your address book: merges duplicates, puts phone numbers in one format, fills in missing names, adds XMPP and JMP.chat chat addresses, and lets you edit contacts, labels and mailing lists in one tab.
+- Cleans up your address book: merges duplicates, puts phone numbers in one format, fills in missing names and adds XMPP chat addresses (JMP.chat too). Edit contacts, labels and mailing lists, and import vCards, in one tab.
+
 ## Details
 - Categories: Contacts (and Miscellaneous if a second is wanted).
+- Tags: address book, contacts, duplicates, merge, vcard, mailing list, labels, phone numbers, xmpp, jmp.chat.
+- Contributions URL: https://github.com/sponsors/precisioncrab
+- Icon: `icons/icon.svg` rendered at 128 px (`../website/contacts-cleanup-icon-128.png`).
+- Privacy policy: none (decided 2026-10-28): no network connections, nothing collected; the description says the undo copies stay on the computer.
 - License: Mozilla Public License 2.0.
 - Support site: https://github.com/precisioncrab/contacts-cleanup/issues
 - Homepage: the precisioncrab.com page for it, once it exists (else the GitHub repo).
@@ -49,8 +59,15 @@ Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
 - Screenshots (made-up cards, 1280x800, taken 2026-10-28 from 0.1.28): `../atn-screenshots/` next to the repo (not in it), 01 to 10: All contacts with the editor and a mailing list in the sidebar (dark), Duplicates (light), the merge page (light), a mailing list's page (dark), right-click a contact (light), Phone numbers (light), Import vCard into a new address book (dark), In several books (light), Missing names (dark), Chat addresses (dark). Captions and alt text: `../website/SCREENSHOTS.md`; the same ten at 2560x1600 for precisioncrab.com in `../website/`.
 - Package to upload: `dist/contacts-cleanup-<version>.xpi` (`npm run package`). `web-ext lint`: 0 errors; its warnings are Firefox's checker not knowing Thunderbird's APIs (addressBooks, mailingLists, spaces, windows.openDefaultBrowser).
 
+## Developer comments (Technical Details)
+Thunderbird only lets add-ons change one copy of a contact that's in two address books with the same contact ID; Contacts Cleanup marks the other copy and sorts them out under In several books. Mailing lists live in local address books only (Thunderbird's synced CardDAV and Google books can't hold them); a label does the same job there and syncs with the contact. Questions, ideas and problems: https://github.com/precisioncrab/contacts-cleanup/issues
+
 ## Notes for the reviewer
 Contacts Cleanup is a Manifest V2 add-on using only the addressBooks, contacts, mailingLists, compose (beginNew only), menus, spaces and storage APIs (V2 because Thunderbird 158's V3 contacts.update and create store every character of the vCard as a custom property on the card; Thunderbird bug 2085594). Changes are written with contacts.update, create and delete ({ vCard }) and mailingLists.create, delete, addMember and removeMember, always after the user clicks Apply, Save, Create, Merge or Delete; each card's previous vCard is kept in storage.local for undo. addressBooks.update and mailingLists.update only rename, after the user picks Rename… and types a name. addressBooks.create makes one local address book only when the user picks New address book… in the Import vCard dialog and clicks Import. addressBooks.delete runs only when the user right-clicks an address book (or ticks "then delete" after moving its contacts out) and confirms a dialog saying it can't be undone. compose.beginNew opens a new message (nothing is sent) when the user picks "New message to this list", "New Bcc message to this list" or "New message to everyone with this label" (To or Bcc) on a right-click menu; it needs no permission. The Chat page sends runtime.sendMessage to one other add-on (thunderbird-omemo@precisioncrab) if the user has it; nothing else leaves the add-on. No network connections, no remote code; the package is the source (nothing minified or generated).
+
+## Decided (maintainer, 2026-10-28)
+- License stays MPL-2.0: Thunderbird's own license (no relicensing if Thunderbird takes a feature in), and file-level, so these files can sit inside Daynizer's add-on; copies of changed files stay open.
+- No privacy policy (see Details).
 
 ## Decided (maintainer, 2026-10-27)
 - The description names OMEMO for Thunderbird but doesn't link it: the add-on's own Chat page has the links. (OMEMO for Thunderbird is installed from file with signatures off, which a reviewer could object to.)
