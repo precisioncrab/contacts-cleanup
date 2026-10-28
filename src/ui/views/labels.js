@@ -157,7 +157,7 @@ async function bookToLabel(ctx, book) {
   }
 }
 
-async function listToLabel(ctx, book, list) {
+export async function listToLabel(ctx, book, list) {
   const others = writable(ctx).filter((b) => b.id !== book.id);
   // after: "keep" (members stay, the list too), "delete" (members stay, the list goes) or "move" (into `target`; the list goes).
   const pick = { label: list.name, after: "keep", target: others[0]?.id ?? null };
@@ -229,7 +229,7 @@ export function listMenu(ctx, e, book, list) {
 }
 
 /** Deletes a mailing list after asking (its contacts stay; Undo makes it again with its members). */
-async function deleteList(ctx, book, list) {
+export async function deleteList(ctx, book, list) {
   const go = await ctx.confirm({
     title: `Delete the mailing list ${list.name}?`,
     body: [h("p", {}, `Only the list goes: its ${plural(list.members.length, "member stays", "members stay")} in ${book.name}. Undo (the message after, or Changes) makes it again with its members.`)],
