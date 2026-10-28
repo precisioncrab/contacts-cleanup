@@ -106,7 +106,7 @@ function importVCards(ctx) {
         books.map((b) => h("option", { value: b.id, selected: b.id === book }, hidden.has(b.id) ? `${b.name} (hidden in the sidebar)` : b.name)),
         h("option", { value: NEW_BOOK, selected: book === NEW_BOOK }, "New address book…")),
         nameBox,
-        h("label", { class: "dialog-label" }, "Add a label to each (optional)"),
+        h("label", { class: "dialog-label" }, "Add a label to each contact (optional)"),
         h("input", { type: "text", style: { width: "100%" }, list: "import-labels", placeholder: "Pick one or type a new one", onInput: (e) => {
           labelText = e.target.value;
         } }),
