@@ -215,6 +215,7 @@ export function listMenu(ctx, e, book, list) {
   openContextMenu(e, [
     // Thunderbird puts the list in the message and sends to its members.
     { label: "New message to this list", disabled: !list.members.length, onClick: () => ctx.writeTo({ to: [{ id: list.id, type: "mailingList" }] }) },
+    { label: "New Bcc message to this list", disabled: !list.members.length, onClick: () => ctx.writeTo({ bcc: [{ id: list.id, type: "mailingList" }] }) },
     { separator: true },
     { label: "Rename…", disabled: Boolean(ctx.state.busy), onClick: async () => {
       const name = await ctx.askName({ title: `Rename the list ${list.name}`, value: list.name });

@@ -2,7 +2,17 @@
 
 _What only a person in Thunderbird can check. Use made-up cards in a throwaway address book first; pick only the test books in the sidebar (click one, Ctrl+click another; from 0.1.22) until the test cards behave._
 
-## Quick run before the ATN submission (about 15 minutes, 0.1.27)
+## 0.1.28: the ATN build (about 3 minutes)
+
+The build to submit. 0.1.27's quick run (below) passed on 2026-10-28; this adds two things from it.
+
+1. Install `contacts-cleanup/dist/contacts-cleanup-0.1.28.xpi` over 0.1.27.
+2. **All contacts > Import vCard…** (pick any .vcf, then Cancel in the dialog): the label box says "Add a label to each contact (optional)".
+3. **Right-click a mailing list** in the sidebar (make one in a test book if you have none): New message to this list, and under it **New Bcc message to this list**. The Bcc one opens a message with the list in Bcc. Close it without saving.
+
+**Report:** what didn't match.
+
+## Quick run before the ATN submission (about 15 minutes, 0.1.27; passed 2026-10-28)
 
 Import vCard into any address book or a new one with a label, a mailing list's own page (everyone in its address book with a checkbox), and right-click a contact for its labels and mailing lists. (0.1.26's run, 2026-10-28, passed; Owen Clarke wasn't in In several books, Grace Okafor was, so the step was done with her.)
 
