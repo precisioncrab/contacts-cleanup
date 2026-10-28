@@ -46,7 +46,7 @@ Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
 - Support site: https://github.com/precisioncrab/contacts-cleanup/issues
 - Homepage: the precisioncrab.com page for it, once it exists (else the GitHub repo).
 - Source code upload: not needed. Nothing is minified, bundled or generated; the package is the source.
-- Screenshots (made-up cards, 1280x800, taken 2026-10-27 from 0.1.24; 0.1.25 and 0.1.26 add the right-click menus, hiding and mailing lists in the sidebar, nothing the six show differently): `../atn-screenshots/` next to the repo (not in it): 1 Duplicates (light), 2 the merge page (light), 3 Phone numbers (light), 4 Missing names (dark), 5 All contacts with the editor (dark), 6 Chat addresses with the help panel (dark).
+- Screenshots (made-up cards, 1280x800, taken 2026-10-28 from 0.1.28): `../atn-screenshots/` next to the repo (not in it), 01 to 10: All contacts with the editor and a mailing list in the sidebar (dark), Duplicates (light), the merge page (light), a mailing list's page (dark), right-click a contact (light), Phone numbers (light), Import vCard into a new address book (dark), In several books (light), Missing names (dark), Chat addresses (dark). Captions and alt text: `../website/SCREENSHOTS.md`; the same ten at 2560x1600 for precisioncrab.com in `../website/`.
 - Package to upload: `dist/contacts-cleanup-<version>.xpi` (`npm run package`). `web-ext lint`: 0 errors; its warnings are Firefox's checker not knowing Thunderbird's APIs (addressBooks, mailingLists, spaces, windows.openDefaultBrowser).
 
 ## Notes for the reviewer
