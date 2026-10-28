@@ -8,7 +8,9 @@ _Drafted 2026-10-20. Accurate wording only, no keyword stuffing (ATN reviewers r
 Contacts Cleanup
 
 ## Summary (250 characters at most)
-Cleans up your address book: merges duplicate contacts, puts phone numbers in one format, fills in missing names, and adds XMPP chat addresses (including JMP.chat addresses for texting phone numbers) to contact cards.
+Cleans up your address book: merges duplicates, puts phone numbers in one format, fills in missing names and adds XMPP chat addresses (JMP.chat too). Edit contacts, labels and mailing lists, and import vCards, in one tab.
+
+_(On ATN since 2026-10-28, 221 characters. Before: "Cleans up your address book: merges duplicate contacts, puts phone numbers in one format, fills in missing names, and adds XMPP chat addresses (including JMP.chat addresses for texting phone numbers) to contact cards.")_
 
 ## Description
 
@@ -41,10 +43,6 @@ It opens as a tab from its button in Thunderbird's left sidebar, its toolbar but
 Also by Precision Crab: Daynizer, tasks, calendar and contacts with CalDAV and CardDAV sync in Thunderbird (https://addons.thunderbird.net/thunderbird/addon/daynizer/).
 
 Source code (MPL-2.0): https://github.com/precisioncrab/contacts-cleanup
-
-### Summaries offered 2026-10-28 (naming labels and mailing lists; which one went in is to confirm)
-- Cleans up and manages your address book: merges duplicates, puts phone numbers in one format, fills in missing names, adds XMPP and JMP.chat chat addresses, and lets you edit contacts, labels and mailing lists in one tab.
-- Cleans up your address book: merges duplicates, puts phone numbers in one format, fills in missing names and adds XMPP chat addresses (JMP.chat too). Edit contacts, labels and mailing lists, and import vCards, in one tab.
 
 ## Details
 - Categories: Contacts (and Miscellaneous if a second is wanted).
